@@ -19,12 +19,12 @@
 
 */
 template<typename T>
-int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T *&comp_mask, 
-    T *&comp_bitval, float threshold = -1.0, int chunk_size = 4)
+int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask, 
+    T **comp_bitval, float threshold = -1.0, int chunk_size = 4)
 {
     // Init data final mask and bitval for future use
-    cudaMalloc(&comp_mask, elem_size * sizeof(T));
-    cudaMalloc(&comp_bitval, elem_size * sizeof(T));
+    cudaMalloc(comp_mask, elem_size * sizeof(T));
+    cudaMalloc(comp_bitval, elem_size * sizeof(T));
 
     // One mask and bitval for entire dataset
     T *d_mask, *d_bitval;
@@ -64,6 +64,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T *&comp_mask,
         cudaMemcpy(h_mask, d_mask, elem_size * sizeof(T), cudaMemcpyDeviceToHost);
         cudaCheckError();
         int popc = 0;
+        // TODO: builtin_popcount is only for int
         for(ull i = 0; i < elem_size; ++i)
             popc += __builtin_popcount(h_mask[i]);
         printf("Saved %d bits of %d (%.2f%%)\n", popc, elem_size * sizeof(T) * 8, 
@@ -78,8 +79,8 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T *&comp_mask,
             num_elems * elem_size * sizeof(T) * 8, (double)*h_bits_saved * 100.0 / (num_elems * elem_size * sizeof(T) * 8.0));
         // Store the mask/value for max compressed format
         if(*h_bits_saved > max_saved) {
-            cudaMemcpy(comp_mask, d_mask, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(comp_bitval, d_bitval, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(*comp_mask, d_mask, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(*comp_bitval, d_bitval, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
             max_saved = *h_bits_saved;
             avg_comp_size = elem_size * (num_elems * elem_size * sizeof(T) * 8.0 - *h_bits_saved) / (num_elems * elem_size * sizeof(T) * 8) + 1;
 
