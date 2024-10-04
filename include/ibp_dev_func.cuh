@@ -256,9 +256,10 @@ __inline__ __device__ int read_one_iter(const int32_t *cpu_src, int32_t *shm_met
 }
 
 // Function to decompress and write features
+template<bool FITS_SHMEM>
 __inline__ __device__ void decompress_and_write_cpu(int32_t *dest, const int32_t *src, 
     int32_t *shm_mask, int32_t *shm_bitval, const int32_t feature_len, const int32_t compressed_len, int32_t *workspace,
-    const int32_t *dev_mask, const int32_t *dev_bitval, int shmem_elems, int32_t chunk_size = 4) {
+    const int32_t *dev_mask = nullptr, const int32_t *dev_bitval = nullptr, int shmem_elems = 0, int32_t chunk_size = 4) {
     int laneId = threadIdx.x % DWARP_SIZE;
     int64_t bitmask_offset = BITS_TO_BYTES((feature_len * sizeof(float) + chunk_size - 1) / chunk_size);
     // 4-byte align
@@ -319,10 +320,13 @@ __inline__ __device__ void decompress_and_write_cpu(int32_t *dest, const int32_t
             cur_bitshift = 32;
             if(compressed_feat) {
                 int32_t mask;
-                if(i < shmem_elems)
+                if constexpr(!FITS_SHMEM) {
+                    if(i < shmem_elems)
+                        mask = shm_mask[i];
+                    else
+                        mask = dev_mask[i];
+                } else
                     mask = shm_mask[i];
-                else
-                    mask = dev_mask[i];
                 cur_bitshift -= __popc(mask);
             }
         }
@@ -352,17 +356,23 @@ __inline__ __device__ void decompress_and_write_cpu(int32_t *dest, const int32_t
             int32_t num_bits = cur_bitshift;
             int32_t temp_read_size;
             int32_t local_mask;
-            if(i < shmem_elems)
+            if constexpr(!FITS_SHMEM) {
+                if(i < shmem_elems)
+                    local_mask = shm_mask[i];
+                else
+                    local_mask = dev_mask[i];
+            } else
                 local_mask = shm_mask[i];
-            else
-                local_mask = dev_mask[i];
             int32_t temp_dest = 0;
             // Start from bitshift and insert current compressed feature
             if(compressed_feat) {
-                if(i < shmem_elems)
+                if constexpr(!FITS_SHMEM) {
+                    if(i < shmem_elems)
+                        temp_dest = shm_bitval[i];
+                    else
+                        temp_dest = dev_bitval[i];
+                } else
                     temp_dest = shm_bitval[i];
-                else
-                    temp_dest = dev_bitval[i];
                 temp_read_size = min(num_bits, __clz(local_mask));
             } else {
                 temp_dest = 0;
