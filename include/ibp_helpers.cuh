@@ -11,6 +11,17 @@
 #define FULL_MASK 0xffffffff
 #define ull unsigned long long
 
+// Macro for checking cuda errors following a cuda launch or api call
+#define cudaCheckError()                                       \
+  {                                                            \
+    cudaError_t e = cudaGetLastError();                        \
+    if (e != cudaSuccess) {                                    \
+      printf("Cuda failure %s:%d: '%s'\n", __FILE__, __LINE__, \
+             cudaGetErrorString(e));                           \
+      exit(EXIT_FAILURE);                                      \
+    }                                                          \
+  }
+
 // Optimized padded, aligned CPU -> GPU data copy function
 // Performs best with 4+ byte elements, i.e., float32, int32, etc.
 typedef uint32_t WORD; 
