@@ -1,18 +1,28 @@
 #include "ibp_helpers.cuh"
-// TODO: Potential optimization: tiled count
-// Count number of bits set and unset in the input array
 
+// Count number of bits set and unset in the input array
 template<typename T>
 __global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int32_t *bit_count) {
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, 
         "Data type must be castable to integer");
-    for(ull i = blockIdx.x; i < num_elems; i += gridDim.x) {
-        for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
+    
+    __shared__ int32_t bit_ctr[256 * sizeof(T) * 8];
+    int32_t *my_ctr = &bit_ctr[threadIdx.x * sizeof(T) * 8];
+    for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
+        // Reset shmem counter
+        for(ull bit = 0; bit < sizeof(T) * 8; ++bit)
+            my_ctr[bit] = 0;
+        // Count bits set in each element
+        for(ull i = blockIdx.x; i < num_elems; i += gridDim.x) {
             T val = ((T*)input_arr)[i * elem_size + j];
             for(ull bit = 0; bit < sizeof(T) * 8; ++bit) {
-                if(val & (1ull << bit)) \
-                    atomicAdd(&bit_count[j * sizeof(T) * 8 + bit], 1);
+                if(val & (1ull << bit))
+                    my_ctr[bit] += 1;
             }
+        }
+        // Accumulate in global counter
+        for(ull bit = 0; bit < sizeof(T) * 8; ++bit) {
+            atomicAdd(&bit_count[j * sizeof(T) * 8 + bit], my_ctr[bit]);
         }
     }
 }

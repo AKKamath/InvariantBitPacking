@@ -44,7 +44,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
     int *d_num_bits;
     cudaMalloc(&d_num_bits, elem_size * 8 * sizeof(T) * sizeof(int));
     cudaMemset(d_num_bits, 0, elem_size * 8 * sizeof(T) * sizeof(int));
-    count_bit_kernel<<<32, 512>>> (input_arr, num_elems, elem_size, d_num_bits);
+    count_bit_kernel<<<320, 256>>> (input_arr, num_elems, elem_size, d_num_bits);
     cudaDeviceSynchronize();
     cudaCheckError();
 
@@ -73,7 +73,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
         
         // Count real bits saved in the dataset
         cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
-        check_feats<<<32, 512>>> (input_arr, num_elems, elem_size, d_mask, d_bitval, d_bits_saved);
+        check_feats<<<320, 512>>> (input_arr, num_elems, elem_size, d_mask, d_bitval, d_bits_saved);
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
         printf("Threshold %.2f: Saved bits per element: %llu (Total %ld, %.3f%%)\n", threshold, *h_bits_saved, 
