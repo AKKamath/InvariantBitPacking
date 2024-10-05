@@ -10,7 +10,7 @@ __global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int
         for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
             T val = ((T*)input_arr)[i * elem_size + j];
             for(ull bit = 0; bit < sizeof(T) * 8; ++bit) {
-                if(val & (1 << bit)) \
+                if(val & (1ull << bit)) \
                     atomicAdd(&bit_count[j * sizeof(T) * 8 + bit], 1);
             }
         }
@@ -26,10 +26,10 @@ __global__ void create_mask(int32_t *bit_count, T *mask, T *vals, ull num_elems,
         T masker = 0;
         for(ull j = 0; j < sizeof(T) * 8; ++j) {
             if(bit_count[i * sizeof(T) * 8 + j] > threshold * num_elems) {
-                val |= (1ll << j);
-                masker |= (1ll << j);
+                val |= (1ull << j);
+                masker |= (1ull << j);
             } else if(bit_count[i * sizeof(T) * 8 + j] < (1.0 - threshold) * num_elems) {
-                masker |= (1ll << j);
+                masker |= (1ull << j);
             }
         }
         vals[i] = val;
@@ -48,8 +48,11 @@ __global__ void check_feats(T *input_arr, ull num_elems, ull elem_size,
         // For each element, find bits saved
         for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
             T val = input_arr[i * elem_size + j];
-            if((val & mask[j]) == vals[j])
-                atomicAdd(&bit_ctr, __popc(mask[j]));
+            if((val & mask[j]) == vals[j]) {
+                int count = 0;
+                POPC(count, mask[j]);
+                atomicAdd(&bit_ctr, count);
+            }
         }
         __syncthreads();
         // Need elem_size bits of metadata, so only worth if at least that many saved

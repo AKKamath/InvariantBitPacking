@@ -10,6 +10,38 @@
 // Mask for all threads in warp
 #define FULL_MASK 0xffffffff
 #define ull unsigned long long
+#ifdef __CUDA_ARCH__
+#define POPC(count, val) \
+    if constexpr(sizeof(val) == 1) { \
+        uint8_t val2 = *(uint8_t*)val; \
+        count = __popc((unsigned)val2); \
+    } else if constexpr(sizeof(val) == 2) { \
+        uint16_t val2 = *(uint16_t*)val; \
+        count = __popc((unsigned)val2); \
+    } else if constexpr(sizeof(val) == 4) { \
+        count = __popc(*(uint32_t*)&val); \
+    } else if constexpr(sizeof(val) == 8) { \
+        count = __popcll(*(uint64_t*)&val); \
+    } else { \
+        static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
+    }
+
+#else
+#define POPC(count, val) \
+    if constexpr(sizeof(val) == 1) { \
+        uint8_t val2 = *(uint8_t*)val; \
+        count = __builtin_popcount((unsigned)val2); \
+    } else if constexpr(sizeof(val) == 2) { \
+        uint16_t val2 = *(uint16_t*)val; \
+        count = __builtin_popcount((unsigned)val2); \
+    } else if constexpr(sizeof(val) == 4) { \
+        count = __builtin_popcount(*(uint32_t*)&val); \
+    } else if constexpr(sizeof(val) == 8) { \
+        count = __builtin_popcountll(*(uint64_t*)&val); \
+    } else { \
+        static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
+    }
+#endif
 
 // Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError()                                       \
