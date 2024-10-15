@@ -1,3 +1,4 @@
+#include <stdint.h>
 #ifndef IBP_HELPERS_CUH
 #define IBP_HELPERS_CUH
 /**************** Commonly used constants ****************/
@@ -43,8 +44,8 @@
     }
 #endif
 
-bool print_debug = true;
-#define DPRINTF(fmt, ...) if(print_debug) printf(fmt, ##__VA_ARGS__)
+bool ibp_print_debug = true;
+#define DPRINTF(fmt, ...) {if(ibp_print_debug) printf(fmt, ##__VA_ARGS__); }
 
 // Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError()                                       \

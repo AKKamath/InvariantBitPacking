@@ -1,5 +1,5 @@
 #include "ibp_helpers.cuh"
-
+#include <cassert>
 // Count number of bits set and unset in the input array
 template<typename T>
 __global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int32_t *bit_count) {

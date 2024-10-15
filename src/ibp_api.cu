@@ -6,7 +6,7 @@ namespace ibp {
 
 void print_debug_msg(bool print)
 {
-    print_debug = print;
+    ibp_print_debug = print;
 }
 
 /**
