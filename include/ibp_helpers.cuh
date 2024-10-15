@@ -43,6 +43,9 @@
     }
 #endif
 
+bool print_debug = true;
+#define DPRINTF(fmt, ...) if(print_debug) printf(fmt, ##__VA_ARGS__)
+
 // Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError()                                       \
   {                                                            \
@@ -54,8 +57,19 @@
     }                                                          \
   }
 
-// Optimized padded, aligned CPU -> GPU data copy function
-// Performs best with 4+ byte elements, i.e., float32, int32, etc.
+/**
+ * @brief Optimized padded, aligned CPU to GPU data copy function.
+ *
+ * This function uses warp-level primitives to efficiently copy data from CPU to GPU memory,
+ * ensuring that the data is cache-line-aligned.
+ *
+ * @param dest Pointer to the destination memory on the GPU.
+ * @param src Pointer to the source memory on the CPU.
+ * @param size Number of 4-byte elements to copy.
+ *
+ * @note The function assumes that the source and destination pointers are
+ *       4-byte-aligned.
+ */
 typedef uint32_t WORD; 
 __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int size) 
 {
@@ -75,10 +89,16 @@ __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int si
     }
 }
 
-// Wrapper for generic data type copies
-// Only supports datatypes that are multiple of 4 sized or powers of two, 
-// e.g., 1, 2, 4, 8, 12, 16, etc.
-// 11 byte-sized datatype is not supported
+/**
+ * @brief Wrapper for generic data type copies. It only supports data types 
+ * that are multiples of 4 in size or powers of two, such as 1, 2, 4, 8, 12, 16, etc.
+ * For example, 11 byte-sized data types are not supported.
+ * 
+ * @tparam T Data type
+ * @param dest Destination memory pointer
+ * @param src Source memory pointer
+ * @param length Number of elements to copy
+ */
 template <typename T>
 __inline__ __device__ void memcpy_warp(const T *dest, const T *src, size_t length) 
 {
@@ -99,13 +119,6 @@ __inline__ __device__ void memcpy_warp(const T *dest, const T *src, size_t lengt
         }
         __syncwarp();
     }
-}
-
-// This function needs to be phased out
-template <typename T>
-__inline__ __device__ void memcpy_warp_isspace(const T *dest, const T *src, size_t size) 
-{
-    memcpy_warp(dest, src, size);
 }
 
 // Inclusive scan: Sum of elements in warp to the left of this thread + this thread element
