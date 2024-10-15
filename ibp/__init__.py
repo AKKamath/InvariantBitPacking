@@ -9,5 +9,8 @@ def print_debug(flag):
     ibp_cuda.print_debug(flag)
 
 # Returns mask and bitval tensors
-def preprocess(dataset):
-    return ibp_cuda.preprocess(dataset)
+def preprocess(dataset, threshold=None):
+    return ibp_cuda.preprocess(dataset, threshold)
+
+def get_compress_size(dataset, mask, bitval, index_arr=None):
+    return ibp_cuda.get_compress_size(dataset, mask, bitval, index_arr)
