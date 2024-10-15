@@ -6,7 +6,7 @@ __global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, 
         "Data type must be castable to integer");
     
-    __shared__ int32_t bit_ctr[256 * sizeof(T) * 8];
+    __shared__ int32_t bit_ctr[128 * sizeof(T) * 8];
     int32_t *my_ctr = &bit_ctr[threadIdx.x * sizeof(T) * 8];
     for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
         // Reset shmem counter

@@ -1,25 +1,22 @@
 #include "ibp_preproc_kernels.cuh"
-
+namespace ibp {
 // TODO: Variable chunk size
-/*
-    Input: 
-        input_arr - 2D array of input data to be compressed [num_elems x elem_size]
-        num_elems - Number of elements in input_arr
-        elem_size - Size of each element in input_arr 
-        chunk_size - Size of each chunk
-    Output:
-        comp_mask - Returned mask for compression. Size is elem_size.
-        comp_bitval - Returned bit values for compression. Size is elem_size.
-    Optional:
-        chunk_size [TODO] - Size of each chunk
-        threshold - Fixed threshold for mask/bitval calculation. 
-                    Default is -1, which means we will find the best
-
-    Returns: Average compressed length of each element
-
-*/
+/**
+ * @brief Compresses input data using a specified chunk size and threshold.
+ *
+ * @param input_arr 2D array of input data to be compressed [num_elems x elem_size].
+ *                  Should be accessible by GPU (in GPU memory or pinned memory).
+ * @param num_elems Number of elements in input_arr.
+ * @param elem_size Size of each element in input_arr.
+ * @param chunk_size [Unused] Size of each chunk.
+ * @param comp_mask Returned mask for compression. Size is elem_size.
+ * @param comp_bitval Returned bit values for compression. Size is elem_size.
+ * @param threshold Fixed threshold for mask/bitval calculation. Default is -1, which means the best threshold will be found.
+ * 
+ * @return Average compressed length of each element.
+ */
 template<typename T>
-int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask, 
+int preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask, 
     T **comp_bitval, float threshold = -1.0, int chunk_size = 4)
 {
     // Init data final mask and bitval for future use
@@ -44,7 +41,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
     int *d_num_bits;
     cudaMalloc(&d_num_bits, elem_size * 8 * sizeof(T) * sizeof(int));
     cudaMemset(d_num_bits, 0, elem_size * 8 * sizeof(T) * sizeof(int));
-    count_bit_kernel<<<320, 256>>> (input_arr, num_elems, elem_size, d_num_bits);
+    count_bit_kernel<<<320, 128>>> (input_arr, num_elems, elem_size, d_num_bits);
     cudaDeviceSynchronize();
     cudaCheckError();
 
@@ -54,7 +51,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
 
     double max_saved = 0;
     int avg_comp_size = 0;
-    printf("Num elems: %d\n", num_elems);
+    DPRINTF("Num elems: %d\n", num_elems);
     for(threshold = min_thresh; threshold <= max_thresh; threshold += 0.05) {
         // Construct mask and bitval based on threshold
         cudaMemset(d_mask, 0, elem_size * sizeof(T));
@@ -68,7 +65,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
             POPC(count, h_mask[i]);
             popc += count;
         }
-        printf("Saved %d bits of %d (%.2f%%)\n", popc, elem_size * sizeof(T) * 8, 
+        DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, elem_size * sizeof(T) * 8, 
             (double)(popc) * 100.0 / ((double)elem_size * sizeof(T) * 8.0));
         
         // Count real bits saved in the dataset
@@ -76,7 +73,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
         check_feats<<<320, 512>>> (input_arr, num_elems, elem_size, d_mask, d_bitval, d_bits_saved);
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
-        printf("Threshold %.2f: Saved bits per element: %llu (Total %ld, %.3f%%)\n", threshold, *h_bits_saved, 
+        DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %ld, %.3f%%)\n", threshold, *h_bits_saved, 
             num_elems * elem_size * sizeof(T) * 8, (double)*h_bits_saved * 100.0 / (num_elems * elem_size * sizeof(T) * 8.0));
         // Store the mask/value for max compressed format
         if(*h_bits_saved > max_saved) {
@@ -85,7 +82,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
             max_saved = *h_bits_saved;
             avg_comp_size = elem_size * (num_elems * elem_size * sizeof(T) * 8.0 - *h_bits_saved) / (num_elems * elem_size * sizeof(T) * 8) + 1;
 
-            printf("Selected threshold %.2f; compress_len %d\n", threshold, avg_comp_size);
+            DPRINTF("Selected threshold %.2f; compress_len %d\n", threshold, avg_comp_size);
         }
     }
     // Free all memory needed for compression
@@ -100,7 +97,7 @@ int ibp_preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
 
 // TODO: This
 template<typename T>
-int ibp_preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask, 
+int preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask, 
     T **comp_bitval, float threshold = -1.0, int chunk_size = 4)
 {
     return 0;
@@ -131,18 +128,18 @@ int ibp_preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask
         pick_max_distance<<<1, 512>>>(dist_vector, nodes_per_gpu, dev_pick);
         cudaMemcpy(host_pick, dev_pick, sizeof(int32_t), cudaMemcpyDeviceToHost);
         cudaMemcpy(host_vector, dist_vector, nodes_per_gpu * sizeof(int32_t), cudaMemcpyDeviceToHost);
-        //printf("Picked %d; dist %d\n", *host_pick, host_vector[*host_pick]);
+        //DPRINTF("Picked %d; dist %d\n", *host_pick, host_vector[*host_pick]);
         int64_t nodeId = index_arr[*host_pick];
         cudaMemcpy(&multivals[i * feature_len], &typecast_feats[nodeId * feature_len], feature_len * sizeof(int32_t), cudaMemcpyHostToDevice);
     }
     cudaCheckError();
 
     const int ITERS = 00;
-    printf("Iter ");
+    DPRINTF("Iter ");
     for(int i = 0; i < ITERS; ++i) {
-        printf("%d, ", i);
+        DPRINTF("%d, ", i);
         if(i % 20 == 0 && i > 0)
-            printf("\n");
+            DPRINTF("\n");
         cudaMemset(dev_centroids_count, 0, num_centroids * sizeof(int32_t));
         cudaDeviceSynchronize();
         classify_nodes<<<32, 512>>>(masks, multivals, num_centroids, typecast_feats, index_array, nodes_per_gpu, dev_cluster, feature_len);
@@ -151,36 +148,36 @@ int ibp_preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask
         cudaCheckError();
         if(i == 0) {
             cudaMemcpy(host_centroid_count, dev_centroids_count, num_centroids * sizeof(int), cudaMemcpyDeviceToHost);
-            printf("Before clustering\n");
+            DPRINTF("Before clustering\n");
             for(int i = 0; i < num_centroids; ++i) {
                 cudaMemcpy(h_mask, &masks[i * feature_len], feature_len * sizeof(int), cudaMemcpyDeviceToHost);
                 int popc = 0;
                 for(int maskId = 0; maskId < feature_len; ++maskId) {
-                    //printf("%x ", h_mask[maskId]);
+                    //DPRINTF("%x ", h_mask[maskId]);
                     popc += POPC(h_mask[maskId]);
                 }
                 if(host_centroid_count[i])
-                    printf("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
+                    DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
                         feature_len * 32, (double)(popc) * 100.0 / ((double)feature_len * 32.0), host_centroid_count[i]);
             }
         }
     }
-    printf("Finished clustering\n");
+    DPRINTF("Finished clustering\n");
 
     cudaMemcpy(host_centroid_count, dev_centroids_count, num_centroids * sizeof(int), cudaMemcpyDeviceToHost);
     for(int i = 0; i < num_centroids; ++i) {
         cudaMemcpy(h_mask, &masks[i * feature_len], feature_len * sizeof(int), cudaMemcpyDeviceToHost);
         int popc = 0;
         for(int maskId = 0; maskId < feature_len; ++maskId) {
-            //printf("%x ", h_mask[maskId]);
+            //DPRINTF("%x ", h_mask[maskId]);
             popc += POPC(h_mask[maskId]);
         }
         if(host_centroid_count[i])
-            printf("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
+            DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
                 feature_len * 32, (double)(popc) * 100.0 / ((double)feature_len * 32.0), host_centroid_count[i]);
     }
 
-    printf("Num nodes: %ld, num_centroids %d\n", nodes_per_gpu, num_centroids);
+    DPRINTF("Num nodes: %ld, num_centroids %d\n", nodes_per_gpu, num_centroids);
     for(float threshold = 0.7; threshold <= 1.0; threshold += 0.05) {
         cudaMemset(count_stuff, 0, sizeof(long long unsigned));
         create_mask_many<<<50, 512>>> (masks, multivals, num_centroids, dev_centroids_count, typecast_feats, index_array, dev_cluster, feature_len, nodes_per_gpu, threshold);
@@ -188,7 +185,7 @@ int ibp_preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask
         cudaDeviceSynchronize();
         cudaCheckError();
         cudaMemcpy(host_count, count_stuff, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
-        printf("KMeans %f: counts %llu (Total %ld, %.3f%%)\n", threshold, *host_count, 
+        DPRINTF("KMeans %f: counts %llu (Total %ld, %.3f%%)\n", threshold, *host_count, 
             nodes_per_gpu * feature_len * 32, (double)*host_count * 100 / (nodes_per_gpu * feature_len * 32.0));
     }
     cudaFree(masks);
@@ -199,4 +196,5 @@ int ibp_preproc_kmeans(T *input_arr, ull num_elems, ull elem_size, T **comp_mask
     cudaFree(dist_vector);
     cudaFreeHost(host_vector);
     */
+}
 }
