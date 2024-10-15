@@ -2,19 +2,19 @@
 #include <cassert>
 // Count number of bits set and unset in the input array
 template<typename T>
-__global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int32_t *bit_count) {
+__global__ void count_bit_kernel(T *input_arr, ull num_vecs, ull vec_size, int32_t *bit_count) {
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, 
         "Data type must be castable to integer");
     
     __shared__ int32_t bit_ctr[128 * sizeof(T) * 8];
     int32_t *my_ctr = &bit_ctr[threadIdx.x * sizeof(T) * 8];
-    for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
+    for(ull j = threadIdx.x; j < vec_size; j += blockDim.x) {
         // Reset shmem counter
         for(ull bit = 0; bit < sizeof(T) * 8; ++bit)
             my_ctr[bit] = 0;
         // Count bits set in each element
-        for(ull i = blockIdx.x; i < num_elems; i += gridDim.x) {
-            T val = ((T*)input_arr)[i * elem_size + j];
+        for(ull i = blockIdx.x; i < num_vecs; i += gridDim.x) {
+            T val = ((T*)input_arr)[i * vec_size + j];
             for(ull bit = 0; bit < sizeof(T) * 8; ++bit) {
                 if(val & (1ull << bit))
                     my_ctr[bit] += 1;
@@ -28,17 +28,17 @@ __global__ void count_bit_kernel(T *input_arr, ull num_elems, ull elem_size, int
 }
 
 template<typename T>
-__global__ void create_mask(int32_t *bit_count, T *mask, T *vals, ull num_elems, ull elem_size, float threshold) {
+__global__ void create_mask(int32_t *bit_count, T *mask, T *vals, ull num_vecs, ull vec_size, float threshold) {
     assert(gridDim.x == 1);
-    for(ull i = threadIdx.x; i < elem_size; i += blockDim.x) {
+    for(ull i = threadIdx.x; i < vec_size; i += blockDim.x) {
         // Construct bitval and mask
         T val = 0;
         T masker = 0;
         for(ull j = 0; j < sizeof(T) * 8; ++j) {
-            if(bit_count[i * sizeof(T) * 8 + j] > threshold * num_elems) {
+            if(bit_count[i * sizeof(T) * 8 + j] > threshold * num_vecs) {
                 val |= (1ull << j);
                 masker |= (1ull << j);
-            } else if(bit_count[i * sizeof(T) * 8 + j] < (1.0 - threshold) * num_elems) {
+            } else if(bit_count[i * sizeof(T) * 8 + j] < (1.0 - threshold) * num_vecs) {
                 masker |= (1ull << j);
             }
         }
@@ -48,16 +48,16 @@ __global__ void create_mask(int32_t *bit_count, T *mask, T *vals, ull num_elems,
 }
 
 template<typename T>
-__global__ void check_feats(T *input_arr, ull num_elems, ull elem_size, 
+__global__ void check_feats(T *input_arr, ull num_vecs, ull vec_size, 
                             T *mask, T *vals, ull *bits_saved) {
     // Store running bits saved count
     __shared__ ull bit_ctr;
     bit_ctr = 0;
     __syncthreads();
-    for(ull i = blockIdx.x; i < num_elems; i += gridDim.x) {
+    for(ull i = blockIdx.x; i < num_vecs; i += gridDim.x) {
         // For each element, find bits saved
-        for(ull j = threadIdx.x; j < elem_size; j += blockDim.x) {
-            T val = input_arr[i * elem_size + j];
+        for(ull j = threadIdx.x; j < vec_size; j += blockDim.x) {
+            T val = input_arr[i * vec_size + j];
             if((val & mask[j]) == vals[j]) {
                 int count = 0;
                 POPC(count, mask[j]);
@@ -65,9 +65,9 @@ __global__ void check_feats(T *input_arr, ull num_elems, ull elem_size,
             }
         }
         __syncthreads();
-        // Need elem_size bits of metadata, so only worth if at least that many saved
-        if(bit_ctr > elem_size && threadIdx.x == 0) {
-            atomicAdd(bits_saved, bit_ctr - elem_size);
+        // Need vec_size bits of metadata, so only worth if at least that many saved
+        if(bit_ctr > vec_size && threadIdx.x == 0) {
+            atomicAdd(bits_saved, bit_ctr - vec_size);
         }
         __syncthreads();
         bit_ctr = 0;
