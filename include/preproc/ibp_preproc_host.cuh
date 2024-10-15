@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "ibp_preproc_kernels.cuh"
 namespace ibp {
 // TODO: Variable chunk size
@@ -77,8 +78,8 @@ int preproc_data(T *input_arr, ull num_elems, ull elem_size, T **comp_mask,
             num_elems * elem_size * sizeof(T) * 8, (double)*h_bits_saved * 100.0 / (num_elems * elem_size * sizeof(T) * 8.0));
         // Store the mask/value for max compressed format
         if(*h_bits_saved > max_saved) {
-            cudaMemcpy(*comp_mask, d_mask, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
-            cudaMemcpy(*comp_bitval, d_bitval, elem_size * sizeof(float), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(*comp_mask, d_mask, elem_size * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(*comp_bitval, d_bitval, elem_size * sizeof(T), cudaMemcpyDeviceToDevice);
             max_saved = *h_bits_saved;
             avg_comp_size = elem_size * (num_elems * elem_size * sizeof(T) * 8.0 - *h_bits_saved) / (num_elems * elem_size * sizeof(T) * 8) + 1;
 
