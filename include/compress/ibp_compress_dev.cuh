@@ -80,7 +80,7 @@ __inline__ __device__ void compress_and_write(T *dest, T *src, ull vec_size,
                 // Now perform actual insertion
                 T elem_offset = (bitmask_offset + bitshift / 8) / sizeof(T);
                 T bit_offset = (bitmask_offset * 8 + bitshift) % (sizeof(T) * 8);
-                T insert_bits = min(insert_size, (int)(sizeof(T) * 8) - bit_offset);
+                T insert_bits = min(insert_size, (int)(sizeof(T) * 8 - bit_offset));
                 T insert = ((compressed_val << fin_ins_bits) & (((1ll << insert_bits) - 1ll) << ((sizeof(T) * 8) - insert_bits))) >> bit_offset;
 
                 //if(uncomp)
