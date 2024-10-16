@@ -14,3 +14,6 @@ def preprocess(dataset, threshold=None):
 
 def get_compress_size(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.get_compress_size(dataset, mask, bitval, index_arr)
+
+def compress_inplace(dataset, mask, bitval, index_arr=None):
+    return ibp_cuda.compress_inplace(dataset, mask, bitval, index_arr)

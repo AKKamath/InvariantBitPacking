@@ -4,10 +4,9 @@
 #include "ibp_helpers.cuh"
 #include "preproc/ibp_preproc_host.cuh"
 #include "misc/ibp_misc_kernels.cuh"
+#include "compress/ibp_compress_host.cuh"
 
 bool ibp_print_debug = false;
-
-namespace ibp {
 
 void print_debug_msg(bool print)
 {
@@ -22,10 +21,11 @@ void cuda_deleter(void *ptr)
 /**
  * @brief Preprocess input dataset
  * 
- * @param dataset 2D array of input data to be compressed [num_vecs x vec_size]
+ * @param dataset 2D array of input data to be compressed. [num_vecs x vec_size]
+ *                Must be GPU-accessible (pinned or GPU memory)
  * @return std::tuple<at::Tensor, at::Tensor>
- *         - mask: Returned mask for compression. Size is vec_size.
- *         - bitval: Returned bit values for compression. Size is vec_size.
+ *         - mask: [GPU memory] Returned mask for compression. Size is vec_size.
+ *         - bitval: [GPU memory] Returned bit values for compression. Size is vec_size.
  */
 std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset, 
     c10::optional<float> threshold_)
@@ -52,16 +52,16 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
         // Get input data
         auto dataset_data = dataset.data_ptr<int32_t>();
         // Preprocess data
-        preproc_data<int32_t>(dataset_data, num_vecs, vec_size, 
+        ibp::preproc_data<int32_t>(dataset_data, num_vecs, vec_size, 
             (int32_t**)&mask, (int32_t**)&bitval, threshold);
     } else if(data_size == 8) {
         // Use int64 for 8-byte types
         options = options.dtype(torch::kInt64);
         // Get input data
-        auto dataset_data = dataset.data_ptr<int64_t>();
+        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
         // Preprocess data
-        preproc_data<int64_t>(dataset_data, num_vecs, vec_size,
-            (int64_t**)&mask, (int64_t**)&bitval, threshold);
+        ibp::preproc_data<ull>(dataset_data, num_vecs, vec_size,
+            (ull**)&mask, (ull**)&bitval, threshold);
     }
 
     // Return output tensors
@@ -69,6 +69,20 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
     at::Tensor comp_bitval = torch::from_blob(bitval, {vec_size}, cuda_deleter, options);
     return std::make_tuple(comp_mask, comp_bitval);
 }
+
+/**
+ * @brief Computes the compressed size of a dataset.
+ *
+ * This function calculates the size of each element of the compressed dataset.
+ * Optionally, an index array can be provided to specify which vectors to consider.
+ *
+ * @param dataset The input tensor representing the dataset to be compressed. 
+ *                [vec_size] or [num_vecs x vec_size]
+ * @param mask The preprocessed mask used for compression.
+ * @param bitval The preprocessed bitval used for compression.
+ * @param index_array_ Optional tensor specifying the indices of the vectors to be considered.
+ * @return A tensor representing the compressed size of each element of the dataset.
+ */
 
 at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask, 
     const at::Tensor &bitval, const c10::optional<at::Tensor> &index_array_) {
@@ -113,24 +127,32 @@ at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
         auto dataset_data = dataset.data_ptr<int32_t>();
         auto mask_data = mask.data_ptr<int32_t>();
         auto bitval_data = bitval.data_ptr<int32_t>();
-        // Call kernel
-        check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data, index_array);
+        // Call kernel; separate calls for optimized implementation if index_array unused
+        if(index_array != nullptr)
+            ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(dataset_data, 
+                num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data, index_array);
+        else
+            ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(dataset_data, 
+                num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data);
     } else if(data_size == 8) {
         // Get input data
-        auto dataset_data = dataset.data_ptr<int64_t>();
-        auto mask_data = mask.data_ptr<int64_t>();
-        auto bitval_data = bitval.data_ptr<int64_t>();
-        // Call kernel
-        check_compress_size_kernel<int64_t><<<num_vecs, 256, 0, stream>>>(dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data, index_array);
+        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
+        ull *mask_data = (ull*)mask.data_ptr<int64_t>();
+        ull *bitval_data = (ull*)bitval.data_ptr<int64_t>();
+        // Call kernel; separate calls for optimized implementation if index_array unused
+        if(index_array != nullptr)
+            ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(dataset_data, 
+                num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data, index_array);
+        else
+            ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(dataset_data, 
+                num_vecs, vec_size, mask_data, bitval_data, comp_sizes_data);
     }
-    cudaStreamSynchronize(stream);
+
     return comp_sizes;
 }
 
-void compress_inplace(const at::Tensor &dataset, const at::Tensor &mask, 
-    const at::Tensor &bitval)
+int compress_inplace(const at::Tensor &dataset, const at::Tensor &mask, 
+    const at::Tensor &bitval, const c10::optional<at::Tensor> &index_array_)
 {
     // Check input tensor
     TORCH_CHECK(dataset.device().type() == c10::kCUDA || dataset.is_pinned(), 
@@ -148,26 +170,45 @@ void compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
 
     size_t num_vecs = dataset.dim() == 1 ? 1 : dataset.size(0);
     size_t vec_size = dataset.dim() == 1 ? dataset.size(0) : dataset.size(1);
+
+    // Get index array if provided
+    int64_t *index_array = nullptr;
+    if (index_array_.has_value()) {
+        TORCH_CHECK(index_array_.value().device().type() == c10::kCUDA || 
+            index_array_.value().is_pinned(), 
+            "Index array must accessible by CUDA device (GPU or pinned memory)");
+        TORCH_CHECK(index_array_.value().dim() == 1, "Index array should be 1D");
+        index_array = index_array_.value().to(torch::kInt64).data_ptr<int64_t>();
+        num_vecs = index_array_.value().size(0);
+    }
+
+    int num_comp_vecs = 0;
     // Call preprocessing function with appropriate template arg
     if(data_size == 4) {
         // Get input data
         auto dataset_data = dataset.data_ptr<int32_t>();
-        // TODO: Implement compression
+        auto mask_data = mask.data_ptr<int32_t>();
+        auto bitval_data = bitval.data_ptr<int32_t>();
+        // Perform in-place compression
+        num_comp_vecs = ibp::compress_inplace(dataset_data, dataset_data, 
+            num_vecs, vec_size, mask_data, bitval_data, nullptr, index_array);
     } else if(data_size == 8) {
         // Get input data
-        auto dataset_data = dataset.data_ptr<int64_t>();
-        // TODO: Implement compression
+        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
+        ull *mask_data = (ull*)mask.data_ptr<int64_t>();
+        ull *bitval_data = (ull*)bitval.data_ptr<int64_t>();
+        // Perform in-place compression
+        num_comp_vecs = ibp::compress_inplace(dataset_data, dataset_data, 
+            num_vecs, vec_size, mask_data, bitval_data, nullptr, index_array);
     }
 
-    return;
+    return num_comp_vecs;
 }
-
-} // namespace ibp
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.doc() = "InvariantBitPacking";
-    m.def("print_debug", &ibp::print_debug_msg, "Print debug messages");
-    m.def("preprocess", &ibp::preprocess, "Generate mask and bitval for input dataset");
-    m.def("get_compress_size", &ibp::get_compress_size, "Get compressed size of input dataset");
-    m.def("compress_inplace", &ibp::compress_inplace, "Generate mask and bitval for input dataset");
+    m.def("print_debug", &print_debug_msg, "Print debug messages");
+    m.def("preprocess", &preprocess, "Generate mask and bitval for input dataset");
+    m.def("get_compress_size", &get_compress_size, "Get compressed size of input dataset");
+    m.def("compress_inplace", &compress_inplace, "Generate mask and bitval for input dataset");
 }
