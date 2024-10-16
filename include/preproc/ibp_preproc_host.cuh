@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "ibp_preproc_kernels.cuh"
+#include "ibp_preproc_kmeans.cuh"
 namespace ibp {
 // TODO: Variable chunk size
 /**
@@ -61,10 +62,9 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         // Find number of bits set in mask (theoretical bit savings)
         cudaMemcpy(h_mask, d_mask, vec_size * sizeof(T), cudaMemcpyDeviceToHost);
         cudaCheckError();
-        int popc = 0, count = 0;
+        int popc = 0;
         for(ull i = 0; i < vec_size; ++i) {
-            POPC(count, h_mask[i]);
-            popc += count;
+            POPC(popc, h_mask[i]);
         }
         DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, vec_size * sizeof(T) * 8, 
             (double)(popc) * 100.0 / ((double)vec_size * sizeof(T) * 8.0));
@@ -155,7 +155,7 @@ int preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
                 int popc = 0;
                 for(int maskId = 0; maskId < feature_len; ++maskId) {
                     //DPRINTF("%x ", h_mask[maskId]);
-                    popc += POPC(h_mask[maskId]);
+                    POPC(popc, h_mask[maskId]);
                 }
                 if(host_centroid_count[i])
                     DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
@@ -171,7 +171,7 @@ int preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         int popc = 0;
         for(int maskId = 0; maskId < feature_len; ++maskId) {
             //DPRINTF("%x ", h_mask[maskId]);
-            popc += POPC(h_mask[maskId]);
+            POPC(popc, h_mask[maskId]);
         }
         if(host_centroid_count[i])
             DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 

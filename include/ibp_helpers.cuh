@@ -12,33 +12,52 @@
 #define FULL_MASK 0xffffffff
 #define ull unsigned long long
 #ifdef __CUDA_ARCH__
+// TODO: Turn this into a device function
 #define POPC(count, val) \
     if constexpr(sizeof(val) == 1) { \
         uint8_t val2 = *(uint8_t*)val; \
-        count = __popc((unsigned)val2); \
+        count += __popc((unsigned)val2); \
     } else if constexpr(sizeof(val) == 2) { \
         uint16_t val2 = *(uint16_t*)val; \
-        count = __popc((unsigned)val2); \
+        count += __popc((unsigned)val2); \
     } else if constexpr(sizeof(val) == 4) { \
-        count = __popc(*(uint32_t*)&val); \
+        count += __popc(*(uint32_t*)&val); \
     } else if constexpr(sizeof(val) == 8) { \
-        count = __popcll(*(uint64_t*)&val); \
+        count += __popcll(*(uint64_t*)&val); \
     } else { \
         static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
     }
+
+template <typename T>
+__inline__ __device__ int CLZ(T val) {
+    if constexpr(sizeof(T) == 1) {
+        uint8_t val2 = *(uint8_t*)val;
+        return __clz((unsigned)val2);
+    } else if constexpr(sizeof(val) == 2) {
+        uint16_t val2 = *(uint16_t*)val;
+        return __clz((unsigned)val2);
+    } else if constexpr(sizeof(val) == 4) {
+        return __clz(*(uint32_t*)&val);
+    } else if constexpr(sizeof(val) == 8) {
+        return __clzll(*(uint64_t*)&val);
+    } else {
+        static_assert(sizeof(val) <= 4 || 
+            sizeof(val) == 8, "Data type must be 4 or 8 bytes");
+    }
+}
 
 #else
 #define POPC(count, val) \
     if constexpr(sizeof(val) == 1) { \
         uint8_t val2 = *(uint8_t*)val; \
-        count = __builtin_popcount((unsigned)val2); \
+        count += __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 2) { \
         uint16_t val2 = *(uint16_t*)val; \
-        count = __builtin_popcount((unsigned)val2); \
+        count += __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 4) { \
-        count = __builtin_popcount(*(uint32_t*)&val); \
+        count += __builtin_popcount(*(uint32_t*)&val); \
     } else if constexpr(sizeof(val) == 8) { \
-        count = __builtin_popcountll(*(uint64_t*)&val); \
+        count += __builtin_popcountll(*(uint64_t*)&val); \
     } else { \
         static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
     }
@@ -107,7 +126,7 @@ __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int si
  * @param length Number of elements to copy
  */
 template <typename T>
-__inline__ __device__ void memcpy_warp(const T *dest, const T *src, size_t length) 
+__inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length) 
 {
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0, 
         "Data type size must be 1 byte, 2 bytes, or multiple of 4 bytes");
