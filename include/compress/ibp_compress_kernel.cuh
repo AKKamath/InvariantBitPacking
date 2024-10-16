@@ -1,3 +1,5 @@
+#ifndef IBP_COMPRESS_KERNEL
+#define IBP_COMPRESS_KERNEL
 #include "ibp_helpers.cuh"
 #include "../misc/ibp_misc_dev.cuh"
 #include "ibp_compress_dev.cuh"
@@ -53,3 +55,4 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
     }
 }
 } // namespace ibp
+#endif // IBP_COMPRESS_KERNEL

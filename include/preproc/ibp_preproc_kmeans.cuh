@@ -1,5 +1,7 @@
+#ifndef IBP_PREPROC_KMEANS
+#define IBP_PREPROC_KMEANS
 #include "ibp_helpers.cuh"
-
+namespace ibp {
 __global__ void classify_nodes(int *masks, int *vals, int num_centroids,
     int32_t *typecast_feats, int32_t *index_arr, int num_nodes, int32_t *dev_cluster, int feature_len) {
     __shared__ int min_dist;
@@ -208,3 +210,5 @@ __global__ void check_feats_many(int32_t *feature_arr, int32_t *index_arr, int n
         __syncthreads();
     }
 }
+} // namespace ibp
+#endif // IBP_PREPROC_KMEANS

@@ -1,3 +1,5 @@
+#ifndef IBP_PREPROC_HOST
+#define IBP_PREPROC_HOST
 #include <stdio.h>
 #include "ibp_preproc_kernels.cuh"
 #include "ibp_preproc_kmeans.cuh"
@@ -199,3 +201,4 @@ int preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     */
 }
 }
+#endif // IBP_PREPROC_HOST

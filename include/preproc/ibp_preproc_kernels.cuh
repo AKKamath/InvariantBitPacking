@@ -1,5 +1,8 @@
+#ifndef IBP_PREPROC_KERNELS
+#define IBP_PREPROC_KERNELS
 #include "ibp_helpers.cuh"
 #include <cassert>
+namespace ibp {
 // Count number of bits set and unset in the input array
 template<typename T>
 __global__ void count_bit_kernel(T *input_arr, ull num_vecs, ull vec_size, int32_t *bit_count) {
@@ -74,3 +77,5 @@ __global__ void check_feats(T *input_arr, ull num_vecs, ull vec_size,
         __syncthreads();
     }
 }
+} // namespace ibp
+#endif // IBP_PREPROC_KERNELS

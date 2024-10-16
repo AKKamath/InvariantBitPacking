@@ -1,3 +1,5 @@
+#ifndef IBP_COMPRESS_HOST
+#define IBP_COMPRESS_HOST
 #include "ibp_helpers.cuh"
 #include "ibp_compress_kernel.cuh"
 namespace ibp {
@@ -31,3 +33,4 @@ ull compress_inplace(T *output, T *input, int64_t num_vecs,
     return host_comp_count;
 }
 } // namespace ibp
+#endif // IBP_COMPRESS_HOST
