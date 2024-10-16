@@ -44,9 +44,15 @@
     }
 #endif
 
-bool ibp_print_debug = true;
+#define BITS_TO_BYTES(x) ((x + 7) / 8)
+// If debug prints are desired, define IBP_DEBUG_PRINT
+// then declare "bool ibp_print_debug" in a source file
+#ifdef IBP_DEBUG_PRINT
+extern bool ibp_print_debug;
 #define DPRINTF(fmt, ...) {if(ibp_print_debug) printf(fmt, ##__VA_ARGS__); }
-
+#else
+#define DPRINTF(fmt, ...)
+#endif // IBP_DEBUG_PRINT
 // Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError()                                       \
   {                                                            \
