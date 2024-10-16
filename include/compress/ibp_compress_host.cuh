@@ -32,5 +32,22 @@ ull compress_inplace(T *output, T *input, int64_t num_vecs,
     cudaCheckError();
     return host_comp_count;
 }
+
+template <typename T, typename IndexT=void>
+void compress_condensed(T *output, T *input, int64_t num_vecs, 
+    int64_t vec_size, T *mask, T *bitval, int64_t *comp_offsets, 
+    int32_t *bitmask = nullptr, IndexT *index_array = nullptr) {
+    if(bitmask != nullptr) {
+        cudaMemset(bitmask, 0, (num_vecs + 31) / 32 * sizeof(int32_t));
+    }
+
+    const int NBLOCKS = 32;
+    const int NTHREADS = 512;
+    cudaCheckError();
+    compress_condensed_kernel<<<NBLOCKS, NTHREADS>>>(output, input, num_vecs, 
+        vec_size, mask, bitval, comp_offsets, bitmask, index_array);
+    cudaCheckError();
+    return;
+}
 } // namespace ibp
 #endif // IBP_COMPRESS_HOST

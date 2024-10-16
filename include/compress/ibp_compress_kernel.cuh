@@ -54,5 +54,43 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
             }
     }
 }
+
+template <typename T, typename IndexT = void, typename CtrT = void, typename SizeT = void>
+__global__ void compress_condensed_kernel(T *output, T *input, int64_t num_vecs, 
+    int64_t vec_size, T *mask, T *bitval, int64_t *comp_offsets,
+    int32_t *bitmask = nullptr, IndexT *index_array = nullptr)
+{
+    int64_t vec_bytes = vec_size * sizeof(T);
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int warpId = threadId / DWARP_SIZE;
+    int laneId = threadIdx.x % DWARP_SIZE;
+    int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    for(ull i = warpId; i < num_vecs; i += numWarps) {
+        int64_t insert_size = 0;
+        int64_t start_offset = 0;
+        if(i == 0) {
+            insert_size = comp_offsets[i];
+        }
+        else {
+            start_offset = comp_offsets[i - 1];
+            insert_size = comp_offsets[i] - comp_offsets[i - 1];
+        }
+        ull index = i;
+        if constexpr(!std::is_same<IndexT, void>::value)
+            if(index_array != nullptr)
+                index = index_array[i];
+        __syncwarp();
+        if(insert_size != vec_bytes) {
+            // Compressed write
+            compress_and_write((T*)((char*)output + start_offset), 
+                &input[index * vec_size], vec_size, mask, bitval);
+            if(laneId == 0 && bitmask != nullptr)
+                atomicOr(&bitmask[i / 32], 1 << (i % 32));
+        } else {
+            memcpy_warp((T*)((char*)output + start_offset), 
+                &input[index * vec_size], vec_size);
+        }
+    }
+}
 } // namespace ibp
 #endif // IBP_COMPRESS_KERNEL
