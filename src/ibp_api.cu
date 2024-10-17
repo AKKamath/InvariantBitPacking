@@ -47,30 +47,32 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
 
     auto num_vecs = dataset.size(0);
     auto vec_size = dataset.size(1);
-    void *mask = nullptr, *bitval = nullptr;
     auto options = torch::TensorOptions().device(torch::kCUDA);
+    if(data_size == 4)
+        options = options.dtype(torch::kInt32);
+    else if(data_size == 8)
+        options = options.dtype(torch::kInt64);
+
+    // Prepare output tensors
+    at::Tensor comp_mask = torch::zeros({vec_size}, options);
+    at::Tensor comp_bitval = torch::zeros({vec_size}, options);
+
+    // Get input data
+    void *dataset_data = dataset.data_ptr();
+    void *mask = comp_mask.data_ptr();
+    void *bitval = comp_bitval.data_ptr();
     // Call preprocessing function with appropriate template arg
     if(data_size == 4) {
         // Use int32 for 4-byte types
-        options = options.dtype(torch::kInt32);
-        // Get input data
-        auto dataset_data = dataset.data_ptr<int32_t>();
-        // Preprocess data
-        ibp::preproc_data<int32_t>(dataset_data, num_vecs, vec_size, 
+        ibp::preproc_data<int32_t>((int32_t*)dataset_data, num_vecs, vec_size, 
             (int32_t**)&mask, (int32_t**)&bitval, threshold);
     } else if(data_size == 8) {
-        // Use int64 for 8-byte types
-        options = options.dtype(torch::kInt64);
-        // Get input data
-        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
-        // Preprocess data
-        ibp::preproc_data<ull>(dataset_data, num_vecs, vec_size,
+        // Use ull for 8-byte types
+        ibp::preproc_data<ull>((ull*)dataset_data, num_vecs, vec_size,
             (ull**)&mask, (ull**)&bitval, threshold);
     }
 
     // Return output tensors
-    at::Tensor comp_mask = torch::from_blob(mask, {vec_size}, cuda_deleter, options);
-    at::Tensor comp_bitval = torch::from_blob(bitval, {vec_size}, cuda_deleter, options);
     return std::make_tuple(comp_mask, comp_bitval);
 }
 
@@ -137,58 +139,53 @@ at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
     if(dataset.device().type() != c10::kCUDA)
         comp_sizes = comp_sizes.pin_memory();
     auto comp_sizes_data = comp_sizes.data_ptr<int64_t>();
-    // Call function with appropriate template arg
+
+    // Get input data
+    void *dataset_data = dataset.data_ptr();
+    void *mask_data = mask.data_ptr();
+    void *bitval_data = bitval.data_ptr();
+    // Call kernel; separate calls for optimized implementation if inputs unused
     if(data_size == 4) {
-        // Get input data
-        auto dataset_data = dataset.data_ptr<int32_t>();
-        auto mask_data = mask.data_ptr<int32_t>();
-        auto bitval_data = bitval.data_ptr<int32_t>();
-        // Call kernel; separate calls for optimized implementation if data unused
         if(index_array != nullptr) {
             if(compress_ctr != nullptr)
                 ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (int*)dataset_data, num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, 
                     comp_sizes_data, index_array, (ull*)compress_ctr);
             else
                 ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (int*)dataset_data, num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, 
                     comp_sizes_data, index_array);
         }
         else {
             if(compress_ctr != nullptr)
                 ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (int*)dataset_data, num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, 
                     comp_sizes_data, (void*)nullptr, (ull*)compress_ctr);
             else
                 ibp::check_compress_size_kernel<int32_t><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (int*)dataset_data, num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, 
                     comp_sizes_data);
 
         }
     } else if(data_size == 8) {
-        // Get input data
-        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
-        ull *mask_data = (ull*)mask.data_ptr<int64_t>();
-        ull *bitval_data = (ull*)bitval.data_ptr<int64_t>();
-        // Call kernel; separate calls for optimized implementation if data unused
         if(index_array != nullptr) {
             if(compress_ctr != nullptr)
                 ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (ull*)dataset_data, num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, 
                     comp_sizes_data, index_array, (ull*)compress_ctr);
             else
                 ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (ull*)dataset_data, num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, 
                     comp_sizes_data, index_array);
         }
         else {
             if(compress_ctr != nullptr)
                 ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (ull*)dataset_data, num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, 
                     comp_sizes_data, (void*)nullptr, (ull*)compress_ctr);
             else
                 ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(
-                    dataset_data, num_vecs, vec_size, mask_data, bitval_data, 
+                    (ull*)dataset_data, num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, 
                     comp_sizes_data);
         }
     }
@@ -227,23 +224,17 @@ int compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
     }
 
     int num_comp_vecs = 0;
-    // Call preprocessing function with appropriate template arg
+    // Get input data
+    void *dataset_data = dataset.data_ptr();
+    void *mask_data = mask.data_ptr();
+    void *bitval_data = bitval.data_ptr();
+    // Perform in-place compression with appropriate template args
     if(data_size == 4) {
-        // Get input data
-        auto dataset_data = dataset.data_ptr<int32_t>();
-        auto mask_data = mask.data_ptr<int32_t>();
-        auto bitval_data = bitval.data_ptr<int32_t>();
-        // Perform in-place compression
-        num_comp_vecs = ibp::compress_inplace(dataset_data, dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, nullptr, index_array);
+        num_comp_vecs = ibp::compress_inplace((int*)dataset_data, (int*)dataset_data, 
+            num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, nullptr, index_array);
     } else if(data_size == 8) {
-        // Get input data
-        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
-        ull *mask_data = (ull*)mask.data_ptr<int64_t>();
-        ull *bitval_data = (ull*)bitval.data_ptr<int64_t>();
-        // Perform in-place compression
-        num_comp_vecs = ibp::compress_inplace(dataset_data, dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, nullptr, index_array);
+        num_comp_vecs = ibp::compress_inplace((ull*)dataset_data, (ull*)dataset_data, 
+            num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, nullptr, index_array);
     }
 
     return num_comp_vecs;
@@ -300,30 +291,21 @@ std::tuple<at::Tensor, at::Tensor> compress(const at::Tensor &dataset,
     if(dataset.device().type() != c10::kCUDA)
         comp_dataset = comp_dataset.pin_memory();
 
-    // Call function with appropriate template arg
+    // Get input data
+    void *comp_dataset_data = comp_dataset.data_ptr();
+    void *dataset_data = dataset.data_ptr();
+    void *mask_data = mask.data_ptr();
+    void *bitval_data = bitval.data_ptr();
+    auto offsets = byte_offsets.data_ptr<int64_t>();
+
+    // Perform out-of-place compression with appropriate template args
     if(data_size == 4) {
-        // Get input data
-        auto dataset_data = dataset.data_ptr<int32_t>();
-        auto mask_data = mask.data_ptr<int32_t>();
-        auto bitval_data = bitval.data_ptr<int32_t>();
-        auto comp_dataset_data = comp_dataset.data_ptr<int32_t>();
-        auto offsets = byte_offsets.data_ptr<int64_t>();
-        
-        // Perform out-of-place compression
-        ibp::compress_condensed(comp_dataset_data, dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, offsets, 
+        ibp::compress_condensed((int*)comp_dataset_data, (int*)dataset_data, 
+            num_vecs, vec_size, (int*)mask_data, (int*)bitval_data, offsets, 
             nullptr, index_array);
     } else if(data_size == 8) {
-        // Get input data
-        ull *dataset_data = (ull*)dataset.data_ptr<int64_t>();
-        ull *mask_data = (ull*)mask.data_ptr<int64_t>();
-        ull *bitval_data = (ull*)bitval.data_ptr<int64_t>();
-        ull *comp_dataset_data = (ull*)comp_dataset.data_ptr<int64_t>();
-        auto offsets = byte_offsets.data_ptr<int64_t>();
-
-        // Perform out-of-place compression
-        ibp::compress_condensed(comp_dataset_data, dataset_data, 
-            num_vecs, vec_size, mask_data, bitval_data, offsets, 
+        ibp::compress_condensed((ull*)comp_dataset_data, (ull*)dataset_data, 
+            num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, offsets, 
             nullptr, index_array);
     }
 
@@ -337,4 +319,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("get_compress_size", &get_compress_size, "Get compressed size of input dataset");
     m.def("compress_inplace", &compress_inplace, "Convert input dataset into compressed form");
     m.def("compress", &compress, "Return compressed form of input dataset and byte offsets");
+    //m.def("decompress_fetch", &decompress_fetch, "Decompress dataset into new tensor");
+    //m.def("decompress", &decompress, "Decompressed form of input dataset and byte offsets");
 }
