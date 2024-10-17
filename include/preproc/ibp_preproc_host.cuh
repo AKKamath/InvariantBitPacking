@@ -24,8 +24,10 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     T **comp_bitval, float threshold = -1.0, int chunk_size = 4)
 {
     // Init data final mask and bitval for future use
-    cudaMalloc(comp_mask, vec_size * sizeof(T));
-    cudaMalloc(comp_bitval, vec_size * sizeof(T));
+    if(*comp_mask == nullptr)
+        cudaMalloc(comp_mask, vec_size * sizeof(T));
+    if(*comp_bitval == nullptr)
+        cudaMalloc(comp_bitval, vec_size * sizeof(T));
 
     // One mask and bitval for entire dataset
     T *d_mask, *d_bitval;
