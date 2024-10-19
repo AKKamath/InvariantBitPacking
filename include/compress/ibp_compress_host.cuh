@@ -4,10 +4,10 @@
 #include "ibp_compress_kernel.cuh"
 namespace ibp {
 
-template <typename T, typename IndexT=void>
-ull compress_inplace(T *output, T *input, int64_t num_vecs, 
-    int64_t vec_size, T *mask, T *bitval, int32_t *bitmask = nullptr, 
-    IndexT *index_array = nullptr) {
+template <typename T, typename IndexT=void, typename CtrT=void>
+void compress_inplace(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
+    T *mask, T *bitval, int32_t *bitmask = nullptr, IndexT *index_array = nullptr, 
+    CtrT *comp_ctr = nullptr, cudaStream_t stream = 0) {
     if(bitmask != nullptr) {
         cudaMemset(bitmask, 0, (num_vecs + 31) / 32 * sizeof(int32_t));
     }
@@ -17,26 +17,19 @@ ull compress_inplace(T *output, T *input, int64_t num_vecs,
     T *working_space;
     cudaMalloc(&working_space, (NBLOCKS * NTHREADS / DWARP_SIZE * vec_size) * sizeof(T));
     cudaMemset(working_space, 0, (NBLOCKS * NTHREADS / DWARP_SIZE * vec_size) * sizeof(T));
-    ull *comp_ctr;
-    cudaMalloc(&comp_ctr, sizeof(ull));
-    cudaMemset(comp_ctr, 0, sizeof(ull));
     cudaCheckError();
-    compress_inplace_kernel<<<NBLOCKS, NTHREADS>>>(output, input, num_vecs, vec_size, 
+    compress_inplace_kernel<<<NBLOCKS, NTHREADS, 0, stream>>>(output, input, num_vecs, vec_size, 
         mask, bitval, working_space, bitmask, index_array, comp_ctr);
-    cudaDeviceSynchronize();
     cudaCheckError();
-    // Get number of compressed vectors
-    ull host_comp_count = 0;
-    cudaMemcpy(&host_comp_count, comp_ctr, sizeof(ull), cudaMemcpyDeviceToHost);
     cudaFree(working_space);
     cudaCheckError();
-    return host_comp_count;
+    return;
 }
 
 template <typename T, typename IndexT=void>
 void compress_condensed(T *output, T *input, int64_t num_vecs, 
     int64_t vec_size, T *mask, T *bitval, int64_t *comp_offsets, 
-    int32_t *bitmask = nullptr, IndexT *index_array = nullptr) {
+    int32_t *bitmask = nullptr, IndexT *index_array = nullptr, cudaStream_t stream = 0) {
     if(bitmask != nullptr) {
         cudaMemset(bitmask, 0, (num_vecs + 31) / 32 * sizeof(int32_t));
     }
@@ -44,7 +37,7 @@ void compress_condensed(T *output, T *input, int64_t num_vecs,
     const int NBLOCKS = 32;
     const int NTHREADS = 512;
     cudaCheckError();
-    compress_condensed_kernel<<<NBLOCKS, NTHREADS>>>(output, input, num_vecs, 
+    compress_condensed_kernel<<<NBLOCKS, NTHREADS, 0, stream>>>(output, input, num_vecs, 
         vec_size, mask, bitval, comp_offsets, bitmask, index_array);
     cudaCheckError();
     return;

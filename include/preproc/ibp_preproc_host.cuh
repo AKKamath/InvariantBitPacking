@@ -21,7 +21,7 @@ namespace ibp {
  */
 template<typename T>
 int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask, 
-    T **comp_bitval, float threshold = -1.0, int chunk_size = 4)
+    T **comp_bitval, float threshold = -1.0, cudaStream_t stream = 0)
 {
     // Init data final mask and bitval for future use
     if(*comp_mask == nullptr)
@@ -47,8 +47,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     int *d_num_bits;
     cudaMalloc(&d_num_bits, vec_size * 8 * sizeof(T) * sizeof(int));
     cudaMemset(d_num_bits, 0, vec_size * 8 * sizeof(T) * sizeof(int));
-    count_bit_kernel<<<320, 128>>> (input_arr, num_vecs, vec_size, d_num_bits);
-    cudaDeviceSynchronize();
+    count_bit_kernel<<<320, 128, 0, stream>>> (input_arr, num_vecs, vec_size, d_num_bits);
     cudaCheckError();
 
     // Use provided threshold if available, otherwise sweep 0.7 - 1.0
@@ -62,7 +61,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         // Construct mask and bitval based on threshold
         cudaMemset(d_mask, 0, vec_size * sizeof(T));
         cudaMemset(d_bitval, 0, vec_size * sizeof(T));
-        create_mask<<<1, 512>>> (d_num_bits, d_mask, d_bitval, num_vecs, vec_size, threshold);
+        create_mask<<<1, 512, 0, stream>>> (d_num_bits, d_mask, d_bitval, num_vecs, vec_size, threshold);
         // Find number of bits set in mask (theoretical bit savings)
         cudaMemcpy(h_mask, d_mask, vec_size * sizeof(T), cudaMemcpyDeviceToHost);
         cudaCheckError();
@@ -75,7 +74,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         
         // Count real bits saved in the dataset
         cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
-        check_feats<<<320, 512>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
+        check_feats<<<320, 512, 0, stream>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
         DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %ld, %.3f%%)\n", threshold, *h_bits_saved, 
