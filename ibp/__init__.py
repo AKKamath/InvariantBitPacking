@@ -15,8 +15,14 @@ def preprocess(dataset, threshold=None):
 def get_compress_size(dataset, mask, bitval, index_arr=None, compress_total=None):
     return ibp_cuda.get_compress_size(dataset, mask, bitval, index_arr, compress_total)
 
+# Returns bitmask marking compressed tensors
 def compress_inplace(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress_inplace(dataset, mask, bitval, index_arr)
 
 def compress(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress(dataset, mask, bitval, index_arr)
+
+def decompress_fetch(comp_dataset, mask, bitval, bitmask, device, index_arr=None):
+    print("Reached here")
+    print(type(comp_dataset), type(mask), type(bitval), type(bitmask), type(device), type(index_arr))
+    return ibp_cuda.decompress_fetch(comp_dataset, mask, bitval, bitmask, device, index_arr)
