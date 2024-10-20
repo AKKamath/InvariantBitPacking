@@ -23,6 +23,27 @@ repo_dir = Path(this_dir).parent
 sources = [
     "src/ibp_api.cu",
 ]
+include_dirs = [
+    "include/",
+    "include/preproc/",
+    "include/misc/",
+    "include/compress/",
+]
+include_files = [
+    "include/ibp_helpers.cuh",
+    "include/decompress/ibp_decompress_kernel.cuh",
+    "include/decompress/ibp_decompress_host.cuh",
+    "include/decompress/ibp_decompress_dev.cuh",
+    "include/preproc/ibp_preproc_kmeans.cuh",
+    "include/preproc/ibp_preproc_host.cuh",
+    "include/preproc/ibp_preproc_kernels.cuh",
+    "include/ibp_dev_func.cuh",
+    "include/misc/ibp_misc_dev.cuh",
+    "include/misc/ibp_misc_kernels.cuh",
+    "include/compress/ibp_compress_dev.cuh",
+    "include/compress/ibp_compress_kernel.cuh",
+    "include/compress/ibp_compress_host.cuh",
+]
 nvcc_flags = [
     "-O3",
     "-std=c++17",
@@ -30,19 +51,17 @@ nvcc_flags = [
     "--use_fast_math",
     "-lineinfo",
 ]
-include_dirs = [
-    Path(this_dir) / "include",
-]
 
 ext_modules.append(
     CUDAExtension(
         name="ibp_cuda",
         sources=sources,
+        include_dirs=[Path(this_dir) / i for i in include_dirs],
+        depends=sources + include_files,
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
             "nvcc": nvcc_flags + cc_flag,
         },
-        include_dirs=include_dirs,
     )
 )
 
@@ -52,12 +71,14 @@ setup(
         exclude=(
             "build",
             "include",
+            "ibp.egg-info",
         )
     ),
     description="Invariant Bit Packing",
     ext_modules=ext_modules,
     cmdclass={"build_ext": BuildExtension},
     python_requires=">=3.8",
+    depends=sources + include_files,
     install_requires=[
         "packaging",
         "ninja",
