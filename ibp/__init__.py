@@ -22,7 +22,5 @@ def compress_inplace(dataset, mask, bitval, index_arr=None):
 def compress(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress(dataset, mask, bitval, index_arr)
 
-def decompress_fetch(comp_dataset, mask, bitval, bitmask, device, index_arr=None):
-    print("Reached here")
-    print(type(comp_dataset), type(mask), type(bitval), type(bitmask), type(device), type(index_arr))
-    return ibp_cuda.decompress_fetch(comp_dataset, mask, bitval, bitmask, device, index_arr)
+def decompress_fetch(comp_dataset, mask, bitval, bitmask, device, comp_len=None, index_arr=None):
+    return ibp_cuda.decompress_fetch(comp_dataset, mask, bitval, bitmask, device, comp_len, index_arr)

@@ -54,28 +54,28 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
         options = options.dtype(torch::kInt64);
 
     // Prepare output tensors
-    at::Tensor comp_mask = torch::zeros({vec_size}, options);
-    at::Tensor comp_bitval = torch::zeros({vec_size}, options);
+    at::Tensor mask = torch::zeros({vec_size}, options);
+    at::Tensor bitval = torch::zeros({vec_size}, options);
 
     at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
 
     // Get input parameters
     void *dataset_data = dataset.data_ptr();
-    void *mask = comp_mask.data_ptr();
-    void *bitval = comp_bitval.data_ptr();
+    void *mask_data = mask.data_ptr();
+    void *bitval_data = bitval.data_ptr();
     // Call preprocessing function with appropriate template arg
     if(data_size == 4) {
         // Use int32 for 4-byte types
         ibp::preproc_data<int32_t>((int32_t*)dataset_data, num_vecs, vec_size, 
-            (int32_t**)&mask, (int32_t**)&bitval, threshold, stream);
+            (int32_t**)&mask_data, (int32_t**)&bitval_data, threshold, stream);
     } else if(data_size == 8) {
         // Use ull for 8-byte types
         ibp::preproc_data<ull>((ull*)dataset_data, num_vecs, vec_size,
-            (ull**)&mask, (ull**)&bitval, threshold, stream);
+            (ull**)&mask_data, (ull**)&bitval_data, threshold, stream);
     }
 
     // Return output tensors
-    return std::make_tuple(comp_mask, comp_bitval);
+    return std::make_tuple(mask, bitval);
 }
 
 /**
@@ -240,11 +240,11 @@ at::Tensor compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
     if(data_size == 4) {
         ibp::compress_inplace((int*)dataset_data, (int*)dataset_data, num_vecs, 
             vec_size, (int*)mask_data, (int*)bitval_data, bitmask_data, index_array, 
-            (void*)nullptr, stream);
+            (void*)nullptr, (void*)nullptr, stream);
     } else if(data_size == 8) {
         ibp::compress_inplace((ull*)dataset_data, (ull*)dataset_data, num_vecs, 
         vec_size, (ull*)mask_data, (ull*)bitval_data, bitmask_data, index_array, 
-            (void*)nullptr, stream);
+            (void*)nullptr, (void*)nullptr, stream);
     }
 
     return bitmask;
@@ -323,7 +323,7 @@ std::tuple<at::Tensor, at::Tensor> compress(const at::Tensor &dataset,
 
 at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
     const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
-    const c10::optional<at::Tensor> &index_array_)
+    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_)
 {
     // Check input tensor
     TORCH_CHECK(comp_dataset.device().type() == c10::kCUDA || comp_dataset.is_pinned(), 
@@ -352,6 +352,10 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
         index_array = index_array_.value().to(torch::kInt64).data_ptr<int64_t>();
         num_vecs = index_array_.value().size(0);
     }
+
+    int comp_len = vec_size * data_size;
+    if (comp_len_.has_value() && comp_len_.value() > 0)
+        comp_len = comp_len_.value();
     
     // Now generate output decompressed tensor
     auto options = torch::TensorOptions().device(out_device).dtype(comp_dataset.dtype());
@@ -369,10 +373,10 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     // Perform out-of-place compression with appropriate template args
     if(data_size == 4) {
         ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
-        (int*)mask_data, (int*)bitval_data, bitmask_data, vec_size * 4, index_array, stream);
+        (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, stream);
     } else if(data_size == 8) {
         ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
-        (ull*)mask_data, (ull*)bitval_data, bitmask_data, vec_size * 8, index_array, stream);
+        (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, stream);
     }
     return decomp_dataset;
 }

@@ -34,11 +34,9 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
         cudaFuncSetAttribute(decomp_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
         cudaCheckError();
     }
-    fprintf(stderr, "Ran kernel Stream %d, device %d\n", stream, device);
     decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
         output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
         compressed_len, index_array);
-    cudaDeviceSynchronize();
     cudaCheckError();
     return;
 }
