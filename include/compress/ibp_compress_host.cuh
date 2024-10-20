@@ -4,10 +4,10 @@
 #include "ibp_compress_kernel.cuh"
 namespace ibp {
 
-template <typename T, typename IndexT=void, typename CtrT=void>
+template <typename T, typename IndexT=void, typename CtrT=void, typename SizeT=void>
 void compress_inplace(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
     T *mask, T *bitval, int32_t *bitmask = nullptr, IndexT *index_array = nullptr, 
-    CtrT *comp_ctr = nullptr, cudaStream_t stream = 0) {
+    CtrT *comp_ctr = nullptr, SizeT *comp_size = nullptr, cudaStream_t stream = 0) {
     if(bitmask != nullptr) {
         cudaMemset(bitmask, 0, (num_vecs + 31) / 32 * sizeof(int32_t));
     }
@@ -19,7 +19,7 @@ void compress_inplace(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     cudaMemset(working_space, 0, (NBLOCKS * NTHREADS / DWARP_SIZE * vec_size) * sizeof(T));
     cudaCheckError();
     compress_inplace_kernel<<<NBLOCKS, NTHREADS, 0, stream>>>(output, input, num_vecs, vec_size, 
-        mask, bitval, working_space, bitmask, index_array, comp_ctr);
+        mask, bitval, working_space, bitmask, index_array, comp_ctr, comp_size);
     cudaCheckError();
     cudaFree(working_space);
     cudaCheckError();
