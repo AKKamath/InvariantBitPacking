@@ -8,8 +8,8 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     T *mask, T *bitval, int32_t *bitmask, int compressed_len,
     IndexT *index_array = nullptr, cudaStream_t stream = 0) {
     
-    const int NBLOCKS = 16;
-    const int NTHREADS = 1024;
+    const int NBLOCKS = 32;
+    const int NTHREADS = 512;
 
     // Get shmem info
     int shmem_size = 0, maxShmem, device;
