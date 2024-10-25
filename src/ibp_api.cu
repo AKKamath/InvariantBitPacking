@@ -23,7 +23,7 @@ void cuda_deleter(void *ptr)
 }
 
 /**
- * @brief Preprocess input dataset
+ * @brief Preprocess input dataset. Non-blocking call
  * 
  * @param dataset 2D array of input data to be compressed. [num_vecs x vec_size]
  *                Must be GPU-accessible (pinned or GPU memory)
@@ -79,10 +79,11 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
 }
 
 /**
- * @brief Computes the compressed size of a dataset.
+ * @brief Computes the compressed size of a dataset. Non-blocking call.
  *
  * This function calculates the size of each element of the compressed dataset.
  * Optionally, an index array can be provided to specify which vectors to consider.
+ * Non-blocking call. Synchronize CUDA before accessing output tensor.
  *
  * @param dataset The input tensor representing the dataset to be compressed. 
  *                [vec_size] or [num_vecs x vec_size]
@@ -100,6 +101,11 @@ at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
         "Input tensor must accessible by CUDA device (GPU or pinned memory)");
     TORCH_CHECK(dataset.dim() == 1 || dataset.dim() == 2, 
         "Input tensor must be 1D [vec_size] or 2D [num_vecs x vec_size]");
+
+    TORCH_CHECK(mask.device().type() == c10::kCUDA || mask.is_pinned(), 
+        "Mask tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(bitval.device().type() == c10::kCUDA || bitval.is_pinned(), 
+        "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
 
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(dataset.dtype()));
     TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
@@ -203,6 +209,11 @@ at::Tensor compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
     TORCH_CHECK(dataset.dim() == 1 || dataset.dim() == 2, 
         "Input tensor must be 1D [vec_size] or 2D [num_vecs x vec_size]");
 
+    TORCH_CHECK(mask.device().type() == c10::kCUDA || mask.is_pinned(), 
+        "Mask tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(bitval.device().type() == c10::kCUDA || bitval.is_pinned(), 
+        "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
+
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(dataset.dtype()));
     TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
 
@@ -250,7 +261,7 @@ at::Tensor compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
     return bitmask;
 }
 
-std::tuple<at::Tensor, at::Tensor> compress(const at::Tensor &dataset, 
+std::tuple<at::Tensor, at::Tensor> compress_condensed(const at::Tensor &dataset, 
     const at::Tensor &mask, const at::Tensor &bitval, 
     const c10::optional<at::Tensor> &index_array_)
 {
@@ -259,6 +270,11 @@ std::tuple<at::Tensor, at::Tensor> compress(const at::Tensor &dataset,
         "Input tensor must accessible by CUDA device (GPU or pinned memory)");
     TORCH_CHECK(dataset.dim() == 1 || dataset.dim() == 2, 
         "Input tensor must be 1D [vec_size] or 2D [num_vecs x vec_size]");
+
+    TORCH_CHECK(mask.device().type() == c10::kCUDA || mask.is_pinned(), 
+        "Mask tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(bitval.device().type() == c10::kCUDA || bitval.is_pinned(), 
+        "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
 
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(dataset.dtype()));
     TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
@@ -331,6 +347,11 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     TORCH_CHECK(comp_dataset.dim() == 1 || comp_dataset.dim() == 2, 
         "Input tensor must be 1D [vec_size] or 2D [num_vecs x vec_size] got ", comp_dataset.dim());
 
+    TORCH_CHECK(mask.device().type() == c10::kCUDA || mask.is_pinned(), 
+        "Mask tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(bitval.device().type() == c10::kCUDA || bitval.is_pinned(), 
+        "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
+
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(comp_dataset.dtype()));
     TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
 
@@ -381,13 +402,91 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     return decomp_dataset;
 }
 
+#include <ATen/Functions.h>
+#include <ATen/MapAllocator.h>
+#include <c10/core/Storage.h>
+#include <c10/core/StorageImpl.h>
+#include <c10/util/intrusive_ptr.h>
+#include <c10/core/TensorOptions.h>
+at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape, 
+    const py::object &dtype)
+{
+    torch::ScalarType type = torch::python::detail::py_object_to_dtype(dtype);
+    struct stat sb;
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening file for reading");
+        exit(EXIT_FAILURE);
+    }
+    if (fstat(fd, &sb) == -1) {
+        perror("Error getting file size");
+        exit(EXIT_FAILURE);
+    }
+
+    // Create tensor
+    at::Tensor tensor = torch::empty(shape, torch::TensorOptions().dtype(type).device(torch::kCPU));
+
+    // Create new shared memory storage
+    const at::Storage& origStorage = tensor.storage();
+
+    size_t tensor_size = origStorage.nbytes();
+    
+    // Copied from pytorch/aten/src/ATen/StorageUtils.cpp
+    int flags = at::ALLOCATOR_MAPPED_SHAREDMEM | at::ALLOCATOR_MAPPED_EXCLUSIVE |
+        at::ALLOCATOR_MAPPED_KEEPFD | at::ALLOCATOR_MAPPED_UNLINK;
+    std::string handle = at::NewProcessWideShmHandle();
+    auto sptr = at::MapAllocator::makeDataPtr(
+        handle.c_str(), flags, tensor_size * sizeof(uint8_t), nullptr);
+    at::Storage newStorage(c10::make_intrusive<at::StorageImpl>(
+        c10::StorageImpl::use_byte_size_t(),
+        tensor_size,
+        std::move(sptr),
+        /*allocator=*/nullptr,
+        /*resizable=*/false));
+    
+    // Replace the old data_ptr and allocator with the new ones
+    c10::StorageImpl* origStorageImpl = origStorage.unsafeGetStorageImpl();
+    c10::StorageImpl* newStorageImpl = newStorage.unsafeGetStorageImpl();
+    origStorageImpl->set_data_ptr(std::move(newStorageImpl->data_ptr()));
+    origStorageImpl->set_allocator(newStorageImpl->allocator());
+
+    // Copy from file into tensor
+    // If > 20GB, copy in chunks to avoid OOM
+    const off_t FIXED_CHUNK = 20ll * 1024ll * 1024ll * 1024ll;
+    size_t chunk_size = std::min(sb.st_size, FIXED_CHUNK);
+    size_t total_size = sb.st_size, offset = 0;
+    char *data_ptr = (char*)tensor.data_ptr();
+    while(total_size > 0) {
+        void *addr = mmap(NULL, chunk_size, PROT_READ, MAP_PRIVATE, fd, offset);
+        if (addr == MAP_FAILED) {
+            perror("Error mapping file to memory");
+            exit(EXIT_FAILURE);
+        }
+
+        // Copy from mapped memory to tensor
+        memcpy(&data_ptr[offset], addr, chunk_size);
+
+        int err = munmap(addr, chunk_size);
+        if (err == -1) {
+            perror("Error unmapping memory");
+            exit(EXIT_FAILURE);
+        }
+        offset += chunk_size;
+        total_size -= chunk_size;
+        chunk_size = min(total_size, chunk_size);
+    }
+
+    return tensor;
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.doc() = "InvariantBitPacking";
     m.def("print_debug", &print_debug_msg, "Print debug messages");
     m.def("preprocess", &preprocess, "Generate mask and bitval for input dataset");
     m.def("get_compress_size", &get_compress_size, "Get compressed size of input dataset");
-    m.def("compress_inplace", &compress_inplace, "Convert input dataset into compressed form");
-    m.def("compress", &compress, "Return compressed form of input dataset and byte offsets");
+    m.def("compress_inplace", &compress_inplace, "Convert input dataset into compressed form (occupies same space)");
+    m.def("compress_condensed", &compress_condensed, "Return compressed form of input and byte offsets");
     m.def("decompress_fetch", &decompress_fetch, "Decompress dataset into new tensor");
+    m.def("read_shared", &read_shared, "Read tensor from file into shared memory (avoids excessive mem usage)");
     //m.def("decompress", &decompress, "Decompressed form of input dataset and byte offsets");
 }
