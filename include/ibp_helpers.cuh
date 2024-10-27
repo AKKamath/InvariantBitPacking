@@ -6,8 +6,6 @@
 #define GPU_CL_SIZE 128
 // Warp size
 #define DWARP_SIZE 32
-// Floats per cacheline
-#define GPU_CL_FLOATS (GPU_CL_SIZE / sizeof(float))
 // Mask for all threads in warp
 #define FULL_MASK 0xffffffff
 #define ull unsigned long long
