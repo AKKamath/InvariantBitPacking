@@ -26,9 +26,7 @@ __device__ int64_t check_compress_size_blk(T *input, int64_t vec_size, T *mask, 
     // Loop through vector elements
     for(ull j = threadIdx.x; j < vec_size; j += blockDim.x) {
         if((input[j] & mask[j]) == bitval[j]) {
-            ull count = 0;
-            POPC(count, mask[j]);
-            atomicAdd(&workspace, count);
+            atomicAdd(&workspace, (ull)POPC(mask[j]));
         }
     }
     __syncthreads();
@@ -70,7 +68,7 @@ __inline__ __device__ int64_t check_compress_size_warp(T *input, int64_t vec_siz
     int32_t ctr = 0;
     for(ull j = laneId; j < vec_size; j += DWARP_SIZE) {
         if((input[j] & mask[j]) == bitval[j]) {
-            POPC(ctr, mask[j]);
+            ctr += POPC(mask[j]);
         }
     }
     // Get sum of ctr value from warp

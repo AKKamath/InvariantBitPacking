@@ -178,16 +178,14 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
                         mask = dev_mask[i];
                 } else
                     mask = shm_mask[i];
-                int count = 0;
-                POPC(count, mask);
-                cur_bitshift -= count;
+                cur_bitshift -= POPC(mask);
             }
         }
         // Perform scan to obtain starting bit for this thread
         bitshift += warpExclusiveScanSync(FULL_MASK, cur_bitshift);
         // See whether last thread's bitshift exceeds current data in shared memory
         int lastbit_read = __shfl_sync(FULL_MASK, (bitshift + cur_bitshift) / (sizeof(T) * 8), DWARP_SIZE - 1);
-        if(lastbit_read > working_offset - bitmask_offset / sizeof(T)) {
+        if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
             // Read next 128B of metadata
             working_offset = read_one_iter(src, metadata, working_data, 
                 min(SHM_META / sizeof(T), (unsigned long)

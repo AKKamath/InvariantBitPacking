@@ -62,9 +62,7 @@ __global__ void check_feats(T *input_arr, ull num_vecs, ull vec_size,
         for(ull j = threadIdx.x; j < vec_size; j += blockDim.x) {
             T val = input_arr[i * vec_size + j];
             if((val & mask[j]) == vals[j]) {
-                int count = 0;
-                POPC(count, mask[j]);
-                atomicAdd(&bit_ctr, count);
+                atomicAdd(&bit_ctr, POPC(mask[j]));
             }
         }
         __syncthreads();

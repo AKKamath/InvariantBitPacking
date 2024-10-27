@@ -25,9 +25,7 @@ __inline__ __device__ void compress_and_write(T *dest, T *src, ull vec_size,
             cur_bitshift = 8 * sizeof(T);
             // If this chunk is compressable, subtract the bits saved
             if((val & local_mask) == bitval[j]) {
-                int count = 0;
-                POPC(count, local_mask);
-                cur_bitshift -= count;
+                cur_bitshift -= POPC(local_mask);
             }
         }
         // Perform scan to obtain starting bit for this thread
@@ -35,9 +33,7 @@ __inline__ __device__ void compress_and_write(T *dest, T *src, ull vec_size,
         //printf("BS %p %d: %d %d\n", dest, j, cur_bitshift, bitshift);
         if(j < vec_size) {
             T local_mask = mask[j];
-            int count = 0;
-            POPC(count, local_mask);
-            int insert_size = 8 * sizeof(T) - count;
+            int insert_size = 8 * sizeof(T) - POPC(local_mask);
             T compressed_val = 0;
             // Start from bitshift and insert current compressed feature
             if((val & local_mask) == bitval[j]) {

@@ -10,21 +10,22 @@
 #define FULL_MASK 0xffffffff
 #define ull unsigned long long
 #ifdef __CUDA_ARCH__
-// TODO: Turn this into a device function
-#define POPC(count, val) \
-    if constexpr(sizeof(val) == 1) { \
+template <typename T>
+__inline__ __device__ int POPC(T val) {
+    if constexpr(sizeof(T) == 1) { \
         uint8_t val2 = *(uint8_t*)val; \
-        count += __popc((unsigned)val2); \
-    } else if constexpr(sizeof(val) == 2) { \
+        return __popc((unsigned)val2); \
+    } else if constexpr(sizeof(T) == 2) { \
         uint16_t val2 = *(uint16_t*)val; \
-        count += __popc((unsigned)val2); \
-    } else if constexpr(sizeof(val) == 4) { \
-        count += __popc(*(uint32_t*)&val); \
-    } else if constexpr(sizeof(val) == 8) { \
-        count += __popcll(*(uint64_t*)&val); \
+        return __popc((unsigned)val2); \
+    } else if constexpr(sizeof(T) == 4) { \
+        return __popc(*(uint32_t*)&val); \
+    } else if constexpr(sizeof(T) == 8) { \
+        return __popcll(*(uint64_t*)&val); \
     } else { \
         static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
     }
+}
 
 template <typename T>
 __inline__ __device__ int CLZ(T val) {
@@ -45,20 +46,22 @@ __inline__ __device__ int CLZ(T val) {
 }
 
 #else
-#define POPC(count, val) \
+template <typename T>
+__inline__ int POPC(T val) {
     if constexpr(sizeof(val) == 1) { \
         uint8_t val2 = *(uint8_t*)val; \
-        count += __builtin_popcount((unsigned)val2); \
+        return __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 2) { \
         uint16_t val2 = *(uint16_t*)val; \
-        count += __builtin_popcount((unsigned)val2); \
+        return __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 4) { \
-        count += __builtin_popcount(*(uint32_t*)&val); \
+        return __builtin_popcount(*(uint32_t*)&val); \
     } else if constexpr(sizeof(val) == 8) { \
-        count += __builtin_popcountll(*(uint64_t*)&val); \
+        return __builtin_popcountll(*(uint64_t*)&val); \
     } else { \
         static_assert(sizeof(val) <= 4 || sizeof(val) == 8, "Data type must be 4 or 8 bytes"); \
     }
+}
 #endif
 
 #define BITS_TO_BYTES(x) ((x + 7) / 8)
