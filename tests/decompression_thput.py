@@ -23,10 +23,6 @@ def make_mask_and_bitval(tensor, compression):
         i += 1
         if i >= compression * VEC_BITS + tensor.shape[1]:
             break
-
-    count = 0
-    for i in range(tensor.shape[1]):
-        count += bitsoncount(mask[i])
     return mask, bitval
 
 def transfer(tensor):
@@ -72,8 +68,8 @@ def compress_decompress(tensor, mask, bitval):
 # Turn on debug print messages
 #ibp.print_debug(True)
 
-TARGET = [0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.97]
-SIZES = [256, 2048, 8 * 1024, 32 * 1024]
+TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.97]
+SIZES = [256, 1024, 4 * 1024, 16 * 1024]
 NUM_VECS = 10000
 
 runtime = {}
