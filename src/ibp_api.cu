@@ -408,6 +408,10 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
 #include <c10/core/StorageImpl.h>
 #include <c10/util/intrusive_ptr.h>
 #include <c10/core/TensorOptions.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape, 
     const py::object &dtype)
 {
