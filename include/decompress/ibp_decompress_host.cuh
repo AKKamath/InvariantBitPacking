@@ -7,6 +7,9 @@ template <typename T, typename IndexT=void>
 void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
     T *mask, T *bitval, int32_t *bitmask, int compressed_len,
     IndexT *index_array = nullptr, cudaStream_t stream = 0) {
+
+    constexpr int SHM_META = 128;
+    constexpr int SHM_WORK = 64 * sizeof(T);
     
     const int NBLOCKS = 32;
     const int NTHREADS = 512;
@@ -16,16 +19,16 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     cudaGetDevice(&device);
     cudaDeviceGetAttribute(&maxShmem, cudaDevAttrMaxSharedMemoryPerBlockOptin, device);
 
-    auto decomp_kernel = &decompress_fetch_cpu_kernel<false, T, IndexT>;
+    auto decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
     // TODO: Change maxShmem based on executing GPU. Relevant for heterogeneous GPU machines
     if(maxShmem >= 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META)) {
         shmem_size = 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META);
-        decomp_kernel = &decompress_fetch_cpu_kernel<true, T, IndexT>;
+        decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, T, IndexT>;
         DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
             shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
     } else {
         shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
-        decomp_kernel = &decompress_fetch_cpu_kernel<false, T, IndexT>;
+        decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
         DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
             shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
     }

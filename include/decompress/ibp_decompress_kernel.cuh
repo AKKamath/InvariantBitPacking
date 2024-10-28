@@ -5,7 +5,7 @@
 
 namespace ibp {
 
-template <bool FITS_SHMEM, typename T, typename IndexT = void>
+template <bool FITS_SHMEM, int SHM_META, int SHM_WORK, typename T, typename IndexT = void>
 __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vecs, 
     int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
     int compressed_len, IndexT *index_array = nullptr)
@@ -38,7 +38,7 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
                 index = index_array[i];
         // Decompress and write data
         if(bitmask[index / 32] & (1 << (index % 32))) {
-            decompress_fetch_cpu<FITS_SHMEM>(&output[i * vec_size], 
+            decompress_fetch_cpu<FITS_SHMEM, SHM_META, SHM_WORK>(&output[i * vec_size], 
                 &input[index * vec_size], shm_mask, shm_bitval, vec_size, 
                 compressed_len, workspace, dev_mask, dev_bitval, shmem_size);
         } else {

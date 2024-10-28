@@ -2,12 +2,9 @@
 #define IBP_DECOMPRESS_DEV
 #include "ibp_helpers.cuh"
 
-#define SHM_META 128
-#define SHM_WORK 256
-
 namespace ibp {
 // Read one iteration of data from CPU to shared memory
-template<typename T>
+template<int SHM_META, int SHM_WORK, typename T>
 __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_working, 
     int min_elems, int max_elems, int bitmask_offset, int start_offset = 0) 
 {
@@ -21,11 +18,9 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
     for(int k = threadId + (offset - sub_val); k < offset; k += DWARP_SIZE) {
         T *dest_element;
         if(k + start_offset < bitmask_offset / sizeof(T)) {
-            // ASSUMPTION: Shared memory working region size is 128B
-            dest_element = (T*)shm_meta + (k + start_offset) % (128 / sizeof(T));
+            dest_element = (T*)shm_meta + (k + start_offset) % (SHM_META / sizeof(T));
         } else {
-            // ASSUMPTION: Shared memory working region size is 256B
-            dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (256 / sizeof(T));
+            dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
         }
         // Combined read, to improve PCIe util.
         T src_data = *((cpu_src + start_offset) + k);
@@ -50,10 +45,8 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         for(int k = threadId + offset; k < offset + add_val; k += DWARP_SIZE) {
             T *dest_element;
             if(k + start_offset < bitmask_offset / sizeof(T)) {
-                // ASSUMPTION: Shared memory working region size is 128B
                 dest_element = (T*)shm_meta + (k + start_offset) % (SHM_META / sizeof(T));
             } else {
-                // ASSUMPTION: Shared memory working region size is 256B/64 elements
                 dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
             }
             // Combined read, to improve PCIe util.
@@ -78,10 +71,8 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         __syncwarp();
         T *dest_element;
         if(k + start_offset < bitmask_offset / sizeof(T)) {
-            // ASSUMPTION: Shared memory working region size is 128B
             dest_element = (T*)shm_meta + (k + start_offset) % (SHM_META / sizeof(T));
         } else {
-            // ASSUMPTION: Shared memory working region size is 256B
             dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
         }
         // Combined read, to improve PCIe util.
@@ -104,7 +95,7 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
 }
 
 // Function to decompress and write vectors; optimized for src in CPU memory
-template<bool FITS_SHMEM, typename T>
+template<bool FITS_SHMEM, int SHM_META, int SHM_WORK, typename T>
 __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src, 
     T *shm_mask, T *shm_bitval, const int32_t vec_size, const int32_t compressed_len, T *workspace,
     const T *dev_mask = nullptr, const T *dev_bitval = nullptr, int shmem_elems = 0) {
@@ -118,7 +109,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     T *working_data = workspace + SHM_META / sizeof(T);
     int metadata_offset = 0, working_offset = 0;
     // Read up to 64elems/256B from src buffer
-    int offset = read_one_iter(src, metadata, working_data, 1, 
+    int offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 1, 
         min(SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
 
     if(offset > bitmask_offset / sizeof(T)) {
@@ -131,7 +122,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         metadata_offset = offset;
         // Only read metadata so far, so read working data now
         working_offset = bitmask_offset / sizeof(T);
-        working_offset = read_one_iter(src, metadata, working_data, 
+        working_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
                             min(SHM_META / sizeof(T), (unsigned long)vec_size), 
                             min(SHM_WORK / sizeof(T), (unsigned long)vec_size), 
                             bitmask_offset, working_offset);
@@ -151,7 +142,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         read_metadata = __ballot_sync(FULL_MASK, read_metadata);
         if(read_metadata) {
             // Read next 128B of metadata
-            metadata_offset = read_one_iter(src, metadata, working_data, 
+            metadata_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
                 bitmask_offset, metadata_offset);
@@ -187,7 +178,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         int lastbit_read = __shfl_sync(FULL_MASK, (bitshift + cur_bitshift) / (sizeof(T) * 8), DWARP_SIZE - 1);
         if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
             // Read next 128B of metadata
-            working_offset = read_one_iter(src, metadata, working_data, 
+            working_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
                 min(SHM_META / sizeof(T), (unsigned long)
                     max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)), 
                         compressed_len - working_offset)), 
