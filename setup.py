@@ -22,6 +22,9 @@ cc_flag.append("arch=compute_80,code=sm_80")
 repo_dir = Path(this_dir).parent
 sources = [
     "src/ibp_api.cu",
+    "src/preprocess.cu",
+    "src/compress.cu",
+    "src/decompress.cu",
 ]
 include_dirs = [
     "include/",

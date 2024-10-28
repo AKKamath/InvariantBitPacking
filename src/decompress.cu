@@ -1,0 +1,72 @@
+#include <torch/python.h>
+
+#include "c10/cuda/CUDAStream.h"
+#define IBP_DEBUG_PRINT
+#include "ibp_helpers.cuh"
+#include "decompress/ibp_decompress_host.cuh"
+#include "misc/ibp_misc_kernels.cuh"
+
+at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
+    const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
+    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_)
+{
+    // Check input tensor
+    TORCH_CHECK(comp_dataset.device().type() == c10::kCUDA || comp_dataset.is_pinned(), 
+        "Input tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(comp_dataset.dim() == 1 || comp_dataset.dim() == 2, 
+        "Input tensor must be 1D [vec_size] or 2D [num_vecs x vec_size] got ", comp_dataset.dim());
+
+    TORCH_CHECK(mask.device().type() == c10::kCUDA || mask.is_pinned(), 
+        "Mask tensor must accessible by CUDA device (GPU or pinned memory)");
+    TORCH_CHECK(bitval.device().type() == c10::kCUDA || bitval.is_pinned(), 
+        "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
+
+    size_t data_size = torch::elementSize(torch::typeMetaToScalarType(comp_dataset.dtype()));
+    TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
+
+    size_t data_size_mask = torch::elementSize(torch::typeMetaToScalarType(mask.dtype()));
+    size_t data_size_bitval = torch::elementSize(torch::typeMetaToScalarType(bitval.dtype()));
+    TORCH_CHECK(data_size_mask == data_size && data_size_bitval == data_size, 
+        "Mask and bitval tensors must have the same datatype size (4-byte or 8-byte) as input dataset");
+
+    size_t num_vecs = comp_dataset.dim() == 1 ? 1 : comp_dataset.size(0);
+    size_t vec_size = comp_dataset.dim() == 1 ? comp_dataset.size(0) : comp_dataset.size(1);
+
+    // Get index array if provided
+    int64_t *index_array = nullptr;
+    if (index_array_.has_value()) {
+        TORCH_CHECK(index_array_.value().device().type() == c10::kCUDA || 
+            index_array_.value().is_pinned(), 
+            "Index array must accessible by CUDA device (GPU or pinned memory)");
+        TORCH_CHECK(index_array_.value().dim() == 1, "Index array should be 1D");
+        index_array = index_array_.value().to(torch::kInt64).data_ptr<int64_t>();
+        num_vecs = index_array_.value().size(0);
+    }
+
+    int comp_len = vec_size * data_size;
+    if (comp_len_.has_value() && comp_len_.value() > 0)
+        comp_len = comp_len_.value();
+    
+    // Now generate output decompressed tensor
+    auto options = torch::TensorOptions().device(out_device).dtype(comp_dataset.dtype());
+    at::Tensor decomp_dataset = torch::zeros({(long)num_vecs, (long)vec_size}, options);
+    if(out_device.type() != c10::kCUDA)
+        decomp_dataset = decomp_dataset.pin_memory();
+    
+    at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
+    // Get input parameters
+    void *decomp_data = decomp_dataset.data_ptr();
+    void *comp_data = comp_dataset.data_ptr();
+    void *mask_data = mask.data_ptr();
+    void *bitval_data = bitval.data_ptr();
+    int32_t *bitmask_data = bitmask.data_ptr<int32_t>();
+    // Perform out-of-place compression with appropriate template args
+    if(data_size == 4) {
+        ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
+        (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, stream);
+    } else if(data_size == 8) {
+        ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
+        (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, stream);
+    }
+    return decomp_dataset;
+}
