@@ -75,7 +75,7 @@ std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
  *         - mask: [GPU memory] Returned mask for compression. Size is vec_size.
  *         - bitval: [GPU memory] Returned bit values for compression. Size is vec_size.
  */
-std::tuple<at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset, 
+std::tuple<at::Tensor, at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset, 
     int num_clusters, c10::optional<float> threshold_)
 {
     // Check input tensor
@@ -103,21 +103,26 @@ std::tuple<at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset,
 
     at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
 
+    // Now generate output cluster IDs tensor
+    auto options_cluster = torch::TensorOptions().device(torch::kCPU).dtype(torch::kInt32);
+    at::Tensor clusters = torch::zeros({(long)num_vecs}, options_cluster).pin_memory();
+
     // Get input parameters
     void *dataset_data = dataset.data_ptr();
     void *mask_data = mask.data_ptr();
     void *bitval_data = bitval.data_ptr();
+    int32_t *clusters_data = clusters.data_ptr<int32_t>();
     // Call preprocessing function with appropriate template arg
     if(data_size == 4) {
         // Use int32 for 4-byte types
         ibp::preproc_kmeans<int32_t>((int32_t*)dataset_data, num_vecs, vec_size, 
-            (int32_t**)&mask_data, (int32_t**)&bitval_data, num_clusters, threshold);
+            (int32_t**)&mask_data, (int32_t**)&bitval_data, num_clusters, &clusters_data, threshold);
     } else if(data_size == 8) {
         // Use ull for 8-byte types
         ibp::preproc_kmeans<ull>((ull*)dataset_data, num_vecs, vec_size,
-            (ull**)&mask_data, (ull**)&bitval_data, num_clusters, threshold);
+            (ull**)&mask_data, (ull**)&bitval_data, num_clusters, &clusters_data, threshold);
     }
 
     // Return output tensors
-    return std::make_tuple(mask, bitval);
+    return std::make_tuple(mask, bitval, clusters);
 }

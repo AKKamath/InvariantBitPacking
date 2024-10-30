@@ -1,6 +1,7 @@
 #ifndef IBP_PREPROC_HOST
 #define IBP_PREPROC_HOST
 #include <stdio.h>
+#include <algorithm>
 #include "ibp_preproc_kernels.cuh"
 #include "ibp_preproc_kmeans.cuh"
 namespace ibp {
@@ -69,8 +70,8 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         for(ull i = 0; i < vec_size; ++i) {
             popc += POPC(h_mask[i]);
         }
-        DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, vec_size * sizeof(T) * 8, 
-            (double)(popc) * 100.0 / ((double)vec_size * sizeof(T) * 8.0));
+        //DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, vec_size * sizeof(T) * 8, 
+        //    (double)(popc) * 100.0 / ((double)vec_size * sizeof(T) * 8.0));
         
         // Count real bits saved in the dataset
         cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
@@ -102,11 +103,11 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
 // TODO: This
 template<typename T>
 void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask, 
-    T **comp_bitval, unsigned num_centroids, float threshold = -1.0)
+    T **comp_bitval, unsigned num_centroids, int32_t **dev_cluster, float threshold = -1.0)
 {
     int32_t *dev_centroids_count;
     int *host_centroid_count;
-    int32_t *dev_cluster;
+    //int32_t *dev_cluster;
     T *masks, *multivals;
     int32_t *dist_vector, *host_vector;
     int32_t *host_pick, *dev_pick;
@@ -114,24 +115,31 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     cudaMallocHost(&host_pick, sizeof(int32_t));
     T *h_mask;
     ull *d_counter, *h_counter;
+    T *dev_centroids;
+    cudaMalloc(&dev_centroids, num_centroids * vec_size * sizeof(T));
     cudaMalloc(&d_counter, sizeof(ull));
     cudaMallocHost(&h_counter, sizeof(ull));
     cudaMallocHost(&h_mask, vec_size * sizeof(T));
     cudaMalloc(&dist_vector, num_vecs * sizeof(int32_t));
     cudaMallocHost(&host_vector, num_vecs * sizeof(int32_t));
-    cudaMalloc(&dev_cluster, num_vecs * sizeof(int32_t));
+    if(*dev_cluster == nullptr)
+        cudaMalloc(dev_cluster, num_vecs * sizeof(int32_t));
     cudaMalloc(&dev_centroids_count, num_centroids * sizeof(int32_t));
     cudaMallocHost(&host_centroid_count, num_centroids * sizeof(int));
     cudaMalloc(&masks, num_centroids * vec_size * sizeof(T));
     cudaMalloc(&multivals, num_centroids * vec_size * sizeof(T));
-    cudaMemset(dev_cluster, 0, num_vecs * sizeof(int32_t));
+    cudaMemset(*dev_cluster, 0, num_vecs * sizeof(int32_t));
     //cudaMemcpy(index_arr, index_array, num_vecs * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemset(masks, -1, num_centroids * vec_size * sizeof(T));
     cudaMemcpy(multivals, input_arr, vec_size * sizeof(T), cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_centroids, input_arr, vec_size * sizeof(T), cudaMemcpyHostToDevice);
+    int *d_bits_set;
+    cudaMalloc(&d_bits_set, num_centroids * vec_size * 8 * sizeof(T) * sizeof(int));
     cudaCheckError();
     
     // K-means++ initialization algorithm
-    for(int i = 1; i < num_centroids; ++i) {
+    /*for(int i = 1; i < min((ull)num_centroids, num_vecs); ++i) {
+        GPUMemset<<<32, 512>>>(dist_vector, INT_MAX, num_vecs);
         calc_distances<<<32, 512>>>(input_arr, num_vecs, vec_size, multivals, i, dist_vector);
         pick_max_distance<<<1, 512>>>(dist_vector, num_vecs, dev_pick);
         cudaDeviceSynchronize();
@@ -139,10 +147,26 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         cudaMemcpy(host_pick, dev_pick, sizeof(int32_t), cudaMemcpyDeviceToHost);
         cudaMemcpy(host_vector, dist_vector, num_vecs * sizeof(int32_t), cudaMemcpyDeviceToHost);
         cudaCheckError();
-        //DPRINTF("Picked %d; dist %d\n", *host_pick, host_vector[*host_pick]);
-        int64_t nodeId = *host_pick;
+        DPRINTF("%d: Picked %d; dist %d\n", i, *host_pick, host_vector[*host_pick]);
+        int64_t nodeId = //*host_pick;
         cudaMemcpy(&multivals[i * vec_size], &input_arr[nodeId * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(&dev_centroids[i * vec_size], &input_arr[nodeId * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
         cudaCheckError();
+    }*/
+
+    // K-means initialization algorithm (Better compression than K-means++)
+    {
+        std::vector<int> indices(num_vecs);
+        for(int i = 0; i < num_vecs; ++i)
+            indices[i] = i;
+        std::random_shuffle(indices.begin(), indices.end());
+        // K-means initialization algorithm
+        for(int i = 1; i < min((ull)num_centroids, num_vecs); ++i) {
+            int64_t vec_id = indices[i];
+            cudaMemcpy(&multivals[i * vec_size], &input_arr[vec_id * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
+            cudaMemcpy(&dev_centroids[i * vec_size], &input_arr[vec_id * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
+            cudaCheckError();
+        }
     }
     cudaCheckError();
 
@@ -153,15 +177,28 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         if(i % 20 == 0 && i > 0)
             DPRINTF("\n");
         cudaMemset(dev_centroids_count, 0, num_centroids * sizeof(int32_t));
+        cudaMemset(d_bits_set, 0, num_centroids * vec_size * 8 * sizeof(T) * sizeof(int));
         cudaDeviceSynchronize();
         cudaCheckError();
-        cluster_vecs<<<32, 512>>>(input_arr, num_vecs, vec_size, masks, multivals, num_centroids, dev_cluster);
-        create_mask_many<<<50, 512>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, dev_cluster, 0.8);
+        cluster_vecs<<<320, 256>>>(input_arr, num_vecs, vec_size, masks, multivals, num_centroids, *dev_cluster, dev_centroids);
+        compute_new_centroids<<<500, 256>>>(input_arr, num_vecs, vec_size, dev_centroids, num_centroids, dev_centroids_count, d_bits_set, *dev_cluster);
+        construct_bitmasks<<<500, 256>>>(input_arr, num_vecs, vec_size, dev_centroids, num_centroids, dev_centroids_count, d_bits_set, *dev_cluster);
+        //create_mask_many<<<50, 512>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, dev_cluster, 0.9);
         cudaDeviceSynchronize();
+        /*for(int centroid = 0; centroid < num_centroids; ++centroid) {
+            cudaMemcpy(h_mask, &dev_centroids[centroid * vec_size], vec_size * sizeof(T), cudaMemcpyDeviceToHost);
+            DPRINTF("Centroid %d: ", centroid);
+            for(int j = 0; j < vec_size; ++j) {
+                DPRINTF("%x ", h_mask[j]);
+            }
+            DPRINTF("\n");
+        }*/
         cudaCheckError();
-        if(i == 0) {
+        /*if(i == 0) {
+            create_mask_many<<<100, 256>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, *dev_cluster, 0.9);
             cudaMemcpy(host_centroid_count, dev_centroids_count, num_centroids * sizeof(int), cudaMemcpyDeviceToHost);
-            DPRINTF("Before clustering\n");
+            cudaCheckError();
+            //DPRINTF("Before clustering\n");
             for(int i = 0; i < num_centroids; ++i) {
                 cudaMemcpy(h_mask, &masks[i * vec_size], vec_size * sizeof(T), cudaMemcpyDeviceToHost);
                 cudaCheckError();
@@ -174,13 +211,18 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
                     DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
                         vec_size * 32, (double)(popc) * 100.0 / ((double)vec_size * 32.0), host_centroid_count[i]);
             }
-        }
+        }*/
     }
     DPRINTF("Finished clustering\n");
-
+    create_mask_many<<<100, 256>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, *dev_cluster, 0.9);
     cudaMemcpy(host_centroid_count, dev_centroids_count, num_centroids * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaCheckError();
+    int used_centroids = 0;
     for(int i = 0; i < num_centroids; ++i) {
+        if(host_centroid_count[i])
+            used_centroids++;
+    }
+    cudaCheckError();
+    /*for(int i = 0; i < num_centroids; ++i) {
         cudaMemcpy(h_mask, &masks[i * vec_size], vec_size * sizeof(T), cudaMemcpyDeviceToHost);
         int popc = 0;
         for(int maskId = 0; maskId < vec_size; ++maskId) {
@@ -190,26 +232,32 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         if(host_centroid_count[i])
             DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
                 vec_size * 32, (double)(popc) * 100.0 / ((double)vec_size * 32.0), host_centroid_count[i]);
-    }
+    }*/
 
-    DPRINTF("Num nodes: %ld, num_centroids %d\n", num_vecs, num_centroids);
+   float max_comp = 0;
+    DPRINTF("Num nodes: %ld, num_centroids %d, used centroids %d\n", num_vecs, num_centroids, used_centroids);
     for(float threshold = 0.7; threshold <= 1.0; threshold += 0.05) {
         cudaMemset(d_counter, 0, sizeof(long long unsigned));
-        create_mask_many<<<50, 512>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, dev_cluster, threshold);
-        check_feats_many<<<50, 512>>>(input_arr, vec_size, num_vecs, masks, multivals, dev_cluster, d_counter);
+        create_mask_many<<<160, 256>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, *dev_cluster, threshold);
+        check_feats_many<<<50, 512>>>(input_arr, vec_size, num_vecs, masks, multivals, *dev_cluster, d_counter);
         cudaDeviceSynchronize();
         cudaCheckError();
         cudaMemcpy(h_counter, d_counter, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
+        float total_size = num_vecs * vec_size * sizeof(T) * 8.0;
         DPRINTF("KMeans %f: counts %llu (Total %ld, %.3f%%)\n", threshold, *h_counter, 
-            num_vecs * vec_size * sizeof(T) * 8, (double)*h_counter * 100 / (num_vecs * vec_size * sizeof(T) * 8.0));
+            num_vecs * vec_size * sizeof(T) * 8, (double)*h_counter * 100 / total_size);
+        max_comp = max(max_comp, (float)*h_counter / total_size);
     }
+    DPRINTF("Centroids %d, compressed: %f\n", num_centroids, max_comp);
+    cudaFree(d_bits_set);
+    cudaFree(dev_centroids);
     cudaFree(dev_pick);
     cudaFreeHost(host_pick);
     cudaFree(d_counter);
     cudaFreeHost(h_counter);
     cudaFree(masks);
     cudaFree(multivals);
-    cudaFree(dev_cluster);
+    //cudaFree(dev_cluster);
     cudaFree(dev_centroids_count);
     cudaFreeHost(host_centroid_count);
     cudaFree(dist_vector);

@@ -19,7 +19,7 @@ void cuda_deleter(void *ptr)
 // Preprocessing functions
 std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset, 
     c10::optional<float> threshold_);
-std::tuple<at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset, 
+std::tuple<at::Tensor, at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset, 
     int num_clusters, c10::optional<float> threshold_);
 
 // Compression functions
