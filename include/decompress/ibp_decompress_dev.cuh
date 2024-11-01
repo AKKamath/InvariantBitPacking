@@ -218,14 +218,15 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
             }
 
             int32_t fin_read_bits = 0;
+            constexpr int32_t T_bits = sizeof(T) * 8;
             // Number of compressed bits being inserted
             while(num_bits > 0) {
                 // Perform actual read
                 // bitshift / 32 converts bits to words, % 64 because shmem buffer holds 64 words
-                int32_t elem_offset = (bitshift / (8 * sizeof(T))) % 64;
-                int32_t bit_offset = bitshift % (8 * sizeof(T));
-                int32_t read_bits = min(temp_read_size, (int32_t)(8 * sizeof(T)) - bit_offset);
-                temp_dest |= ((working_data[elem_offset] << bit_offset) & (((1L << read_bits) - 1L) << ((8 * sizeof(T)) - read_bits))) >> fin_read_bits;
+                //int32_t elem_offset = (bitshift / T_bits) % (SHM_WORK / sizeof(T));
+                int32_t bit_offset = bitshift % T_bits;
+                int32_t read_bits = min(temp_read_size, T_bits - bit_offset);
+                temp_dest |= ((working_data[(bitshift / T_bits) % (SHM_WORK / sizeof(T))] << bit_offset) & (((1L << read_bits) - 1L) << (T_bits - read_bits))) >> fin_read_bits;
                 fin_read_bits += read_bits;
                 num_bits -= read_bits;
                 bitshift += read_bits;

@@ -1,6 +1,7 @@
 #include <torch/python.h>
 
 #include "c10/cuda/CUDAStream.h"
+#include <ATen/cuda/CUDAContext.h>
 #define IBP_DEBUG_PRINT
 #include "ibp_helpers.cuh"
 #include "decompress/ibp_decompress_host.cuh"
@@ -8,8 +9,21 @@
 
 at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
     const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
-    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_)
+    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_,
+    const c10::optional<int> nblks_, const c10::optional<int> nthreads_)
 {
+    // Tested for V100, A100. Adjust as needed for your GPU
+    auto dprops = at::cuda::getCurrentDeviceProperties();
+    // Default to all SMs
+    int NBLKS = dprops->multiProcessorCount;
+
+    if(nblks_.has_value())
+        NBLKS = nblks_.value();
+
+    int NTHREADS = 512;
+    if(nthreads_.has_value())
+        NTHREADS = nthreads_.value();
+
     // Check input tensor
     TORCH_CHECK(comp_dataset.device().type() == c10::kCUDA || comp_dataset.is_pinned(), 
         "Input tensor must accessible by CUDA device (GPU or pinned memory)");
@@ -63,10 +77,12 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     // Perform out-of-place compression with appropriate template args
     if(data_size == 4) {
         ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
-        (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, stream);
+            (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, 
+            stream, NBLKS, NTHREADS);
     } else if(data_size == 8) {
         ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
-        (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, stream);
+            (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, 
+            stream, NBLKS, NTHREADS);
     }
     return decomp_dataset;
 }

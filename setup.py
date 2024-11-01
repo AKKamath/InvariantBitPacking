@@ -50,7 +50,6 @@ include_files = [
 nvcc_flags = [
     "-O3",
     "-std=c++17",
-    "--expt-relaxed-constexpr",
     "--use_fast_math",
     "-lineinfo",
 ]

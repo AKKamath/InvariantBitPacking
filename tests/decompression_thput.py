@@ -21,7 +21,7 @@ def make_mask_and_bitval(tensor, compression):
     for index in indices:
         mask[index // 32] |= 1 << (index % 32)
         i += 1
-        if i >= compression * VEC_BITS + tensor.shape[1]:
+        if i >= compression * VEC_BITS + tensor.shape[1] + 1:
             break
     return mask, bitval
 
@@ -45,7 +45,6 @@ def compress_decompress(tensor, mask, bitval):
     og_size = copy_tensor.numel() * copy_tensor.element_size()
     comp_size = torch.sum(comp_sizes)
     ratio = 1 - (comp_size / og_size)
-    print(f"OG {og_size} Compress: {comp_size} ({ratio*100:.0f}%)")
     bitmask = ibp.compress_inplace(copy_tensor, mask, bitval)
     torch.cuda.synchronize()
 
@@ -57,6 +56,7 @@ def compress_decompress(tensor, mask, bitval):
     torch.cuda.synchronize()
     end = time.time_ns()
     tot_time = (end - start) / 1e6 / ITERS
+    print(f"{ratio*100:.0f}%", end="\t")
     print(f"Decompress time: {(end - start) / 1e6 / ITERS:.3f}ms")
 
     if(not torch.equal(tensor, decomp_tensor.to(torch.device('cpu')))):

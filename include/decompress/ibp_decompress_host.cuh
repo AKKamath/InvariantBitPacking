@@ -6,13 +6,13 @@ namespace ibp {
 template <typename T, typename IndexT=void>
 void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
     T *mask, T *bitval, int32_t *bitmask, int compressed_len,
-    IndexT *index_array = nullptr, cudaStream_t stream = 0) {
+    IndexT *index_array = nullptr, cudaStream_t stream = 0, int blks = 32, int threads = 512) {
 
     constexpr int SHM_META = 128;
     constexpr int SHM_WORK = 64 * sizeof(T);
     
-    const int NBLOCKS = 32;
-    const int NTHREADS = 512;
+    const int NBLOCKS = blks;
+    const int NTHREADS = threads;
 
     // Get shmem info
     int shmem_size = 0, maxShmem, device;

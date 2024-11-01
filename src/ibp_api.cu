@@ -35,7 +35,8 @@ std::tuple<at::Tensor, at::Tensor> compress_condensed(const at::Tensor &dataset,
 // Decompression functions
 at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
     const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
-    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_);
+    const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_,
+    const c10::optional<int> nblks_, const c10::optional<int> nthreads_);
 
 #include <ATen/Functions.h>
 #include <ATen/MapAllocator.h>

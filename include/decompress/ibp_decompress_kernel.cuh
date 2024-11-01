@@ -2,6 +2,7 @@
 #define IBP_DECOMPRESS_KERNEL
 #include "ibp_helpers.cuh"
 #include "ibp_decompress_dev.cuh"
+#include <cuda/pipeline>
 
 namespace ibp {
 
@@ -20,10 +21,14 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     shmem_size /= 2;
     T *shm_mask = (T*)&shmem[(blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK) / sizeof(int)];
     T *shm_bitval = (T*)&shmem[(blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK) / sizeof(int) + shmem_size / sizeof(int)];
+    cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
+    pipe.producer_acquire();
     for(int i = threadIdx.x; i < shmem_size / sizeof(T); i += blockDim.x) {
-        shm_mask[i] = dev_mask[i];
-        shm_bitval[i] = dev_bitval[i];
+        cuda::memcpy_async(&shm_mask[i], &dev_mask[i], sizeof(T), pipe);
+        cuda::memcpy_async(&shm_bitval[i], &dev_bitval[i], sizeof(T), pipe);
     }
+    pipe.producer_commit();
+    pipe.consumer_wait();
     __syncthreads();
 
     int threadId = threadIdx.x + blockIdx.x * blockDim.x;

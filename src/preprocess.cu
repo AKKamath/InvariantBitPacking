@@ -4,10 +4,6 @@
 #define IBP_DEBUG_PRINT
 #include "ibp_helpers.cuh"
 #include "preproc/ibp_preproc_host.cuh"
-#include "misc/ibp_misc_kernels.cuh"
-#include "compress/ibp_compress_host.cuh"
-#include "decompress/ibp_decompress_host.cuh"
-
 
 /**
  * @brief Preprocess input dataset. Non-blocking call
