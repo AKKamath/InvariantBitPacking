@@ -12,6 +12,10 @@ def print_debug(flag):
 def preprocess(dataset, threshold=None):
     return ibp_cuda.preprocess(dataset, threshold)
 
+# Returns mask and bitval tensors
+def preprocess_kmeans(dataset, centroids, threshold=None):
+    return ibp_cuda.preprocess_kmeans(dataset, centroids, threshold)
+
 def get_compress_size(dataset, mask, bitval, index_arr=None, compress_total=None):
     return ibp_cuda.get_compress_size(dataset, mask, bitval, index_arr, compress_total)
 
@@ -23,6 +27,6 @@ def compress(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress(dataset, mask, bitval, index_arr)
 
 def decompress_fetch(comp_dataset, mask, bitval, bitmask, device, comp_len=None,\
-                     index_arr=None, nblks=None, nthds=None):
+                     index_arr=None, nblks=None, nthds=None, imp=None):
     return ibp_cuda.decompress_fetch(comp_dataset, mask, bitval, bitmask, device,\
-                                     comp_len, index_arr, nblks, nthds)
+                                     comp_len, index_arr, nblks, nthds, imp)
