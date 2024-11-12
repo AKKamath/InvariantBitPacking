@@ -1,5 +1,5 @@
 import torch
-import ibp
+import ibp_cuda as ibp
 import time
 
 ITERS = 100
@@ -36,23 +36,30 @@ def transfer(tensor):
     tot_time = (end - start) / 1e6 / ITERS
     return tot_time
 
-def compress_decompress(tensor, mask, bitval):
+def compress_decompress(tensor, mask, bitval, index_arr, impl=None):
     mask = mask.to(torch.device('cuda'))
     bitval = bitval.to(torch.device('cuda'))
     copy_tensor = tensor.detach().clone().pin_memory()
-    comp_sizes = ibp.get_compress_size(copy_tensor, mask, bitval)
+    comp_sizes = ibp.get_compress_size(copy_tensor, mask, bitval, None, None)
     torch.cuda.synchronize()
     og_size = copy_tensor.numel() * copy_tensor.element_size()
     comp_size = torch.sum(comp_sizes)
     ratio = 1 - (comp_size / og_size)
-    bitmask = ibp.compress_inplace(copy_tensor, mask, bitval)
+    bitmask = ibp.compress_inplace(copy_tensor, mask, bitval, None)
+    torch.cuda.synchronize()
+
+    # Untimed warmup
+    decomp_tensor = ibp.decompress_fetch(copy_tensor, mask, bitval, bitmask,
+        torch.device('cuda'), (comp_size / og_size) * tensor.shape[1], index_arr, 
+        None, None, impl)
     torch.cuda.synchronize()
 
     # Timed decompress
     start = time.time_ns()
     for i in range(ITERS):
-        decomp_tensor = ibp.decompress_fetch(copy_tensor, mask, bitval, bitmask, \
-            torch.device('cuda'), (comp_size / og_size) * 4 * tensor.shape[1])
+        decomp_tensor = ibp.decompress_fetch(copy_tensor, mask, bitval, bitmask,
+            torch.device('cuda'), (comp_size / og_size) * tensor.shape[1], index_arr, 
+            None, None, impl)
     torch.cuda.synchronize()
     end = time.time_ns()
     tot_time = (end - start) / 1e6 / ITERS
@@ -70,7 +77,9 @@ def compress_decompress(tensor, mask, bitval):
 
 TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.97]
 SIZES = [256, 1024, 4 * 1024, 16 * 1024]
-NUM_VECS = 10000
+NUM_VECS = 100000
+#SIZES = [256, 400, 512]
+index_arr = None#torch.arange(NUM_VECS).to("cuda")
 
 runtime = {}
 for j in SIZES:
@@ -80,11 +89,14 @@ for size in SIZES:
     print(f"Size: {size} bytes")
     # Create a tensor of size bytes
     tensor = torch.zeros([NUM_VECS, size // 4], dtype=torch.int32).pin_memory()
-    runtime[size][0] = transfer(tensor)
+    runtime[size][-1] = transfer(tensor)
     for rate in TARGET:
         mask, bitval = make_mask_and_bitval(tensor, rate)
-        rate, time_taken = compress_decompress(tensor, mask, bitval)
-        runtime[size][rate] = runtime[size][0] / time_taken
+        rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 0)
+        #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 1)
+        #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 2)
+        print()
+        runtime[size][rate] = runtime[size][-1] / time_taken
     print()
     # Transfer thput
 
@@ -96,7 +108,7 @@ print()
 for i in SIZES:
     print(i, end="\t")
     for j in runtime[i].keys():
-        if(j == 0):
+        if(j == -1):
             continue
         print(f"{runtime[i][j]:.3f}", end="\t")
     print()
