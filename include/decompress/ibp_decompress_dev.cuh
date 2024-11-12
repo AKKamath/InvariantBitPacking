@@ -23,10 +23,10 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
             dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
         }
         // Combined read, to improve PCIe util.
-        T src_data = *((cpu_src + start_offset) + k);
+        //T src_data = *((cpu_src + start_offset) + k);
         // Selective write to GPU memory
         if(k >= 0 && k < max_elems) {
-            *dest_element = src_data;
+            *dest_element = *((cpu_src + start_offset) + k);
             
             /*unsigned int mask = __activemask();
             if(k % 32 == 0) {
@@ -50,10 +50,10 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
                 dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
             }
             // Combined read, to improve PCIe util.
-            T src_data = *((cpu_src + start_offset) + k);
+            //T src_data = *((cpu_src + start_offset) + k);
             // Selective write to GPU memory
             if(k >= 0 && k < max_elems) {
-                *dest_element = src_data;
+                *dest_element = *((cpu_src + start_offset) + k);
                 
                 /*unsigned int mask = __activemask();
                 if(k % 32 == 0) {
@@ -76,10 +76,10 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
             dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
         }
         // Combined read, to improve PCIe util.
-        T src_data = *((cpu_src + start_offset) + k);
+        //T src_data = *((cpu_src + start_offset) + k);
         // Selective write to GPU memory
         if(k < max_elems) {
-            *dest_element = src_data;
+            *dest_element = *((cpu_src + start_offset) + k);
             
             /*unsigned int mask = __activemask();
             if(k % 32 == 0) {

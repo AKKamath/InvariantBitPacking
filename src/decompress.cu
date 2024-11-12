@@ -10,7 +10,7 @@
 at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
     const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
     const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_,
-    const c10::optional<int> nblks_, const c10::optional<int> nthreads_)
+    const c10::optional<int> nblks_, const c10::optional<int> nthreads_, c10::optional<int> impl_)
 {
     // Tested for V100, A100. Adjust as needed for your GPU
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -49,15 +49,18 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     // Get index array if provided
     int64_t *index_array = nullptr;
     if (index_array_.has_value()) {
-        TORCH_CHECK(index_array_.value().device().type() == c10::kCUDA || 
-            index_array_.value().is_pinned(), 
+        TORCH_CHECK(index_array_.value().device().type() == c10::kCUDA, 
             "Index array must accessible by CUDA device (GPU or pinned memory)");
         TORCH_CHECK(index_array_.value().dim() == 1, "Index array should be 1D");
         index_array = index_array_.value().to(torch::kInt64).data_ptr<int64_t>();
         num_vecs = index_array_.value().size(0);
     }
 
-    int comp_len = vec_size * data_size;
+    int impl = 0;
+    if(impl_.has_value())
+        impl = impl_.value();
+
+    int comp_len = vec_size;
     if (comp_len_.has_value() && comp_len_.value() > 0)
         comp_len = comp_len_.value();
     
@@ -78,11 +81,11 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     if(data_size == 4) {
         ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
             (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, 
-            stream, NBLKS, NTHREADS);
+            stream, NBLKS, NTHREADS, impl);
     } else if(data_size == 8) {
         ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
             (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, 
-            stream, NBLKS, NTHREADS);
+            stream, NBLKS, NTHREADS, impl);
     }
     return decomp_dataset;
 }

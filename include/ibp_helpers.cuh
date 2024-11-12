@@ -116,6 +116,25 @@ __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int si
     }
 }
 
+typedef uint64_t WORD64; 
+__inline__ __device__ void memcpy_warp_8byte(WORD64 *dest, const WORD64 *src, int size) 
+{
+    int threadId = threadIdx.x % DWARP_SIZE;
+    // Offset: First element offset that is CL aligned
+    const int align_offset = (32 * sizeof(WORD64) - (((uint64_t)src) % (32 * sizeof(WORD64)))) / sizeof(WORD64);
+    // Padding: Amount to add to size to make it CL aligned
+    // TODO: we can reduce this by align_offset to remove unneeded iterations
+    const int padding = (32 * sizeof(WORD64) - (((uint64_t)size * sizeof(WORD64)) % (32 * sizeof(WORD64)))) / sizeof(WORD64);
+    // Round up to nearest warp multiple
+    int subval = (align_offset + DWARP_SIZE - 1) / DWARP_SIZE * DWARP_SIZE;
+    for(int k = threadId + align_offset - subval; k < size + align_offset + padding; k += DWARP_SIZE) {
+        __syncwarp();
+        // Selective write to GPU memory
+        if(k >= 0 && k < size)
+            *(((WORD64 *)dest) + k) = *(((WORD64 *)src) + k);
+    }
+}
+
 /**
  * @brief Wrapper for generic data type copies. It only supports data types 
  * that are multiples of 4 in size or powers of two, such as 1, 2, 4, 8, 12, 16, etc.
@@ -131,6 +150,17 @@ __inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length)
 {
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0, 
         "Data type size must be 1 byte, 2 bytes, or multiple of 4 bytes");
+
+    /*
+    uint64_t bytes = length * sizeof(T);
+    int elements = bytes / sizeof(WORD64);
+    memcpy_warp_8byte((WORD64*)dest, (WORD64*)src, elements);
+    dest = (T*)((WORD64*)dest + elements);
+    src = (T*)((WORD64*)src + elements);
+    length -= elements * sizeof(WORD64) / sizeof(T);
+    __syncwarp();
+    */
+
     uint64_t bytes = length * sizeof(T);
     int elements = bytes / sizeof(WORD);
     memcpy_warp_4byte((WORD*)dest, (WORD*)src, elements);
@@ -145,6 +175,54 @@ __inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length)
             dest[k] = src[k];
         }
         __syncwarp();
+    }
+}
+
+template <typename T>
+__inline__ __device__ void memcpy_block(T *dest, const T *src, size_t length) 
+{
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0, 
+        "Data type size must be 1 byte, 2 bytes, or multiple of 4 bytes");
+
+    int threadId = threadIdx.x;
+    // 8-byte copies if possible
+    if(((uint64_t)dest) % sizeof(WORD64) == 0 && ((uint64_t)src) % sizeof(WORD64) == 0) {
+        uint64_t bytes = length * sizeof(T);
+        int elements = bytes / sizeof(WORD64);
+        // Offset: First element offset that is CL aligned
+        const int align_offset = ((((uint64_t)src) % (32 * sizeof(WORD64)))) / sizeof(WORD64);
+        for(int k = threadId - align_offset; k < elements; k += blockDim.x) {
+            // Selective write to GPU memory
+            if(k >= 0 && k < elements)
+                *(((WORD64 *)dest) + k) = *(((WORD64 *)src) + k);
+        }
+        length -= elements * sizeof(WORD64) / sizeof(T);
+        dest   += elements * sizeof(WORD64) / sizeof(T);
+        src    += elements * sizeof(WORD64) / sizeof(T);
+    }
+    // 4-byte otherwise
+    if(((uint64_t)dest) % sizeof(WORD) == 0 && ((uint64_t)src) % sizeof(WORD) == 0) {
+        uint64_t bytes = length * sizeof(T);
+        int elements = bytes / sizeof(WORD);
+        // Offset: First element offset that is CL aligned
+        const int align_offset = ((((uint64_t)src) % (32 * sizeof(WORD)))) / sizeof(WORD);
+        for(int k = threadId - align_offset; k < elements; k += blockDim.x) {
+            // Selective write to GPU memory
+            if(k >= 0 && k < elements)
+                *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+        }
+        length -= elements * sizeof(WORD) / sizeof(T);
+        dest   += elements * sizeof(WORD) / sizeof(T);
+        src    += elements * sizeof(WORD) / sizeof(T);
+    }
+
+    // Manually copy the leftover non-4-byte-aligned parts
+    if constexpr(sizeof(T) % sizeof(WORD) != 0) {
+        // TODO: Optimize this
+        int threadId = threadIdx.x;
+        for(int k = threadId; k < length; k += blockDim.x) {
+            dest[k] = src[k];
+        }
     }
 }
 
