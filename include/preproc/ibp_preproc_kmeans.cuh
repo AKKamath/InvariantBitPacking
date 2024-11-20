@@ -299,9 +299,8 @@ __global__ void create_mask_many(T *input_arr, ull vec_size, ull num_vecs,
 template<typename T, typename IndexT = void>
 __global__ void check_feats_many(T *input_arr, int vec_size, int num_vecs, T *masks, T *vals,
     int32_t *dev_cluster, long long unsigned *count, IndexT *index_arr = nullptr) {
-    __shared__ long long unsigned ctr, ctr2;
+    __shared__ long long unsigned ctr;
     ctr = 0;
-    //ctr2 = 0;
     __syncthreads();
     for(int i = blockIdx.x; i < num_vecs; i += gridDim.x) {
         int64_t vec_id = i;
@@ -313,7 +312,6 @@ __global__ void check_feats_many(T *input_arr, int vec_size, int num_vecs, T *ma
             if((val & masks[clusterId * vec_size + j]) == vals[clusterId * vec_size + j]) {
                 atomicAdd(&ctr, POPC(masks[clusterId * vec_size + j]));
             }
-            //atomicAdd(&ctr2, POPC(masks[clusterId * vec_size + j]));
         }
         __syncthreads();
         if(threadIdx.x == 0 && ctr > vec_size)
