@@ -39,7 +39,7 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
     if(offset >= min_elems)
         return start_offset + offset;
     // Read can be completed with less than 32 threads if min_elems is small
-    if(max_elems - offset <= 24) {
+    if((min_elems != 1 && min_elems - offset <= 24) || max_elems - offset <= 24) {
         // Round up to nearest 32-byte boundary
         int add_val = (min_elems - offset + elems_per_32B - 1) / elems_per_32B * elems_per_32B; 
         for(int k = threadId + offset; k < offset + add_val; k += DWARP_SIZE) {
