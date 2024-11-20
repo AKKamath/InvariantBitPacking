@@ -43,7 +43,8 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     TORCH_CHECK(data_size_mask == data_size && data_size_bitval == data_size, 
         "Mask and bitval tensors must have the same datatype size (4-byte or 8-byte) as input dataset");
 
-    size_t num_vecs = comp_dataset.dim() == 1 ? 1 : comp_dataset.size(0);
+    int max_elems = comp_dataset.dim() == 1 ? 1 : comp_dataset.size(0);
+    size_t num_vecs = max_elems;
     size_t vec_size = comp_dataset.dim() == 1 ? comp_dataset.size(0) : comp_dataset.size(1);
 
     // Get index array if provided
@@ -79,13 +80,23 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
     int32_t *bitmask_data = bitmask.data_ptr<int32_t>();
     // Perform out-of-place compression with appropriate template args
     if(data_size == 4) {
-        ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
-            (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, 
-            stream, NBLKS, NTHREADS, impl);
+        if(index_array == nullptr)
+            ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
+                (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, (void*)nullptr, 
+                -1, stream, NBLKS, NTHREADS, impl);
+        else
+            ibp::decompress_fetch((int*)decomp_data, (int*)comp_data, num_vecs, vec_size, 
+                (int*)mask_data, (int*)bitval_data, bitmask_data, comp_len, index_array, 
+                max_elems, stream, NBLKS, NTHREADS, impl);
     } else if(data_size == 8) {
-        ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
-            (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, 
-            stream, NBLKS, NTHREADS, impl);
+        if(index_array == nullptr)
+            ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
+                (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, (void*)nullptr, 
+                -1, stream, NBLKS, NTHREADS, impl);
+        else
+            ibp::decompress_fetch((ull*)decomp_data, (ull*)comp_data, num_vecs, vec_size, 
+                (ull*)mask_data, (ull*)bitval_data, bitmask_data, comp_len, index_array, 
+                max_elems, stream, NBLKS, NTHREADS, impl);
     }
     return decomp_dataset;
 }
