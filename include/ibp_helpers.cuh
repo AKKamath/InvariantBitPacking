@@ -255,4 +255,35 @@ __inline__ __device__ T warpExclusiveScanSync(unsigned mask, T val)
     return val - initial_val;
 }
 
+__inline__ __device__ void __syncthreadsX()
+{
+    asm("bar.sync %0, %1;" :: "r"(threadIdx.y), "r"(blockDim.x));
+}
+
+// Exclusive scan: Sum of all elements in block to the left of this thread
+template<typename T>
+__inline__ __device__ T blkExclusiveScanSync(T val, T *shm_com)
+{
+    // Perform intra-warp exclusive scan first
+    T initial_val = val;
+    #pragma unroll
+    for (int offset = 1; offset < DWARP_SIZE; offset <<= 1) {
+        val += __shfl_up_sync(FULL_MASK, val, offset);
+        // Needed because non-offset elements just add themselves
+        if(threadIdx.x % DWARP_SIZE < offset)
+            val /= 2;
+    }
+    // Last thread lets other threads in blk know value
+    if(threadIdx.x % DWARP_SIZE == DWARP_SIZE - 1)
+        shm_com[threadIdx.x / DWARP_SIZE] = val;
+    
+    __syncthreadsX();
+    // Inter-warp scan now
+    for(int i = threadIdx.x / DWARP_SIZE; i > 0; --i) {
+        val += shm_com[i - 1];
+    }
+    __syncthreadsX();
+    return val - initial_val;
+}
+
 #endif /* IBP_HELPERS_CUH */
