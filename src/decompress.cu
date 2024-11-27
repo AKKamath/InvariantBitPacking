@@ -96,8 +96,8 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
         offset_array = d_values_out;
     }
 
-    // Default: warp-parallel
-    int impl = 0;
+    // Default: Auto-pick based on compressed-ness
+    int impl = -1;
     if(impl_.has_value())
         impl = impl_.value();
 
