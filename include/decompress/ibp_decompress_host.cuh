@@ -8,8 +8,18 @@ namespace ibp {
 template <typename T, typename IndexT=void>
 void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
     T *mask, T *bitval, int32_t *bitmask, int compressed_len,
-    cudaStream_t stream = 0, int blks = 32, int threads = 512, int impl=0,
+    cudaStream_t stream = 0, int blks = 32, int threads = 512, int impl=-1,
     IndexT *index_array = nullptr, IndexT *offset_array = nullptr) {
+
+    // Decide whether to perform TB-parallel or warp-parallel compression
+    if(impl == -1) {
+        // If it's 2x or more compressed, the TB-parallel doesn't
+        // generate enough memory accesses fast enough
+        if(vec_size / compressed_len > 2)
+            impl = 0; // Warp-parallel
+        else
+            impl = 1; // TB-parallel
+    }
     
     int NBLOCKS = blks;
     int NTHREADS = threads;
@@ -48,7 +58,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     // Threadblock-parallel implementation
     else if(impl == 1) {
         dim3 THREADS(NTHREADS, 1, 1);
-        while (2 * THREADS.x > compressed_len && THREADS.x > 32) {
+        while (THREADS.x > compressed_len && THREADS.x > 32) {
             THREADS.x /= 2;
             THREADS.y *= 2;
         }
