@@ -39,12 +39,19 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
             }*/
         }
     }
-    if(offset >= min_elems)
+    // Continue reading if we've only read metadata and there's scope of reading real data
+    int cont = start_offset + offset <= bitmask_offset / sizeof(T) && max_elems > bitmask_offset / sizeof(T);
+    if(offset >= min_elems && !cont) {
+        //if(threadId == 0)
+        //    printf("%p: Read %d (offset)\n", cpu_src, offset);
         return start_offset + offset;
+    }
     // Read can be completed with less than 32 threads if min_elems is small
-    if((min_elems != 1 && min_elems - offset <= 24) || max_elems - offset <= 24) {
+    if((min_elems != 1 && min_elems - offset <= 24 && !cont) || max_elems - offset <= 24) {
         // Round up to nearest 32-byte boundary
-        int add_val = (min_elems - offset + elems_per_32B - 1) / elems_per_32B * elems_per_32B; 
+        int add_val = (min_elems - offset + elems_per_32B - 1) / elems_per_32B * elems_per_32B;
+        if(offset >= min_elems)
+            add_val = (max_elems - offset + elems_per_32B - 1) / elems_per_32B * elems_per_32B;
         for(int k = threadId + offset; k < offset + add_val; k += DWARP_SIZE) {
             T *dest_element;
             if(k + start_offset < bitmask_offset / sizeof(T)) {
@@ -68,6 +75,9 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
             }
         }
         __syncwarp();
+        //if(threadId == 0)
+        //    printf("%p: Read %d; offset %d, add_val %d\n", cpu_src, 
+        //        min(max_elems, offset + add_val), offset, add_val);
         return start_offset + min(max_elems, offset + add_val);
     }
     int k;
@@ -96,6 +106,9 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
     }
     __syncwarp();
 
+    //if(threadId == 0)
+    //    printf("%p: Read %d; min %d, offset %d, onset %d\n", cpu_src, 
+    //        min(max_elems, min_elems + offset + onset), min_elems, offset, onset);
     return start_offset + min(max_elems, min_elems + offset + onset);
 }
 
@@ -115,7 +128,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     int metadata_offset = 0, working_offset = 0;
     // Read up to 64elems/256B from src buffer
     int offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 1, 
-        min(SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
+        min(bitmask_offset < SHM_META ? SHM_WORK / sizeof(T) : SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
 
     if(offset > bitmask_offset / sizeof(T)) {
         metadata_offset = bitmask_offset / sizeof(T);
@@ -267,7 +280,10 @@ __inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *sh
 
     // First copy, 128-byte align the cpu_src
     const int offset = (((int64_t)(cpu_src + start_offset)) % 128) / sizeof(T);
-    int elems = min((ELEM_PER_128B - offset) % ELEM_PER_128B, max_elems);
+    int elems = (ELEM_PER_128B - offset) % ELEM_PER_128B;
+    if(elems < min_elems)
+        elems += min_elems + (ELEM_PER_32B - (min_elems % ELEM_PER_32B)) % ELEM_PER_32B;
+    
     for(int k = threadIdx.x - offset; k < elems; k += blockDim.x) {
         T *dest_element;
         if(k + start_offset < bitmask_offset / sizeof(T)) {
@@ -281,34 +297,11 @@ __inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *sh
             DEB_PRINTF("%d [%ld]: %x\n", start_offset + k, (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T)), *dest_element);
         }
     }
-    // Was this enough?
-    if(elems >= min_elems) {
-        __syncthreadsX();
-        //if(threadIdx.x == 0)
-        //    DEB_PRINTF("%p: Read %d; \n", cpu_src, min(elems, max_elems));
-        return start_offset + min(elems, max_elems);
-    }
-
-    int add_val = min_elems + (ELEM_PER_32B - (min_elems % ELEM_PER_32B)) % ELEM_PER_32B;
-    for(int k = elems + threadIdx.x; k < elems + add_val; k += blockDim.x) {
-        T *dest_element;
-        if(k + start_offset < bitmask_offset / sizeof(T)) {
-            dest_element = (T*)shm_meta + (k + start_offset) % (SHM_META / sizeof(T));
-        } else {
-            dest_element = (T*)shm_working + (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T));
-        }
-        // Selective write to GPU memory
-        if(k >= 0 && k < max_elems) {
-            *dest_element = *((cpu_src + start_offset) + k);
-            DEB_PRINTF("%d [%ld]: %x\n", start_offset + k, (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T)), *dest_element);
-        }
-    }
-    elems = min(add_val + elems, max_elems);
 
     __syncthreadsX();
     //if(threadIdx.x == 0)
-    //    DEB_PRINTF("%p: Read %d; add_val %d\n", cpu_src, elems, add_val);
-    return start_offset + elems;
+    //    printf("%p: Read %d\n", cpu_src, min(elems, max_elems));
+    return start_offset + min(elems, max_elems);
 }
 
 template<typename T>
