@@ -117,16 +117,16 @@ __global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_
     shmem_size /= 2;
     T *shm_mask = (T*)&shmem[offset];
     T *shm_bitval = (T*)&shmem[offset + shmem_size / sizeof(T)];
-    //cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-    //pipe.producer_acquire();
+    cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
+    pipe.producer_acquire();
     for(int i = threadIdx.x + threadIdx.y * blockDim.x; i < shmem_size / sizeof(T); i += blockDim.x * blockDim.y) {
-        //cuda::memcpy_async(&shm_mask[i], &dev_mask[i], sizeof(T), pipe);
-        //cuda::memcpy_async(&shm_bitval[i], &dev_bitval[i], sizeof(T), pipe);
-        shm_mask[i] = dev_mask[i];
-        shm_bitval[i] = dev_bitval[i];
+        cuda::memcpy_async(&shm_mask[i], &dev_mask[i], sizeof(T), pipe);
+        cuda::memcpy_async(&shm_bitval[i], &dev_bitval[i], sizeof(T), pipe);
+        //shm_mask[i] = dev_mask[i];
+        //shm_bitval[i] = dev_bitval[i];
     }
-    //pipe.producer_commit();
-    //pipe.consumer_wait();
+    pipe.producer_commit();
+    pipe.consumer_wait();
     __syncthreads();
 
     int blockId = blockIdx.x * blockDim.y + threadIdx.y;
