@@ -102,18 +102,26 @@ __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int si
 {
     int threadId = threadIdx.x % DWARP_SIZE;
     // Offset: First element offset that is CL aligned
-    const int align_offset = (GPU_CL_SIZE - (((uint64_t)src)  % GPU_CL_SIZE)) / sizeof(WORD);
+    const int align_offset = (GPU_CL_SIZE - (((uint64_t)src) % GPU_CL_SIZE)) / sizeof(WORD);
     // Padding: Amount to add to size to make it CL aligned
     // TODO: we can reduce this by align_offset to remove unneeded iterations
-    const int padding = (GPU_CL_SIZE - (((uint64_t)size * sizeof(WORD)) % GPU_CL_SIZE)) / sizeof(WORD);
+    int padding = ((GPU_CL_SIZE - (((uint64_t)size * sizeof(WORD)) % GPU_CL_SIZE)) % GPU_CL_SIZE) / sizeof(WORD);
     // Round up to nearest warp multiple
-    int subval = (align_offset + DWARP_SIZE - 1) / DWARP_SIZE * DWARP_SIZE;
-    for(int k = threadId + align_offset - subval; k < size + align_offset + padding; k += DWARP_SIZE) {
-        __syncwarp();
+    padding = (padding + align_offset) % (GPU_CL_SIZE / sizeof(WORD));
+
+    for(int k = threadId + align_offset; k < size + padding; k += DWARP_SIZE) {
         // Selective write to GPU memory
-        if(k >= 0 && k < size)
+        if(k < size)
             *(((WORD *)dest) + k) = *(((WORD *)src) + k);
     }
+
+    for(int k = threadId; k < align_offset; k += DWARP_SIZE) {
+        // Selective write to GPU memory
+        if(k >= 0)
+            *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+    }
+    __syncwarp();
+
 }
 
 typedef uint64_t WORD64; 
