@@ -2,17 +2,28 @@ TESTS = ./tests
 BUILD = ./build
 NCU=/home/x_kamathak/miniforge3/envs/dgl-dev-gpu-117/bin/../nsight-compute/2022.2.0/ncu
 DLRM ?= ./dlrm_feats
- 
+OUTPUT = ./results
 
-copy_test: ${BUILD}/copy_test
-	./${BUILD}/copy_test > output.txt
-	python scripts/plot.py output.txt output
+${OUTPUT}:
+	mkdir -p ${OUTPUT}
+
+copy_test: ${BUILD}/copy_test ${OUTPUT}
+	./${BUILD}/copy_test > ${OUTPUT}/output.txt
+	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
 
 ${BUILD}/copy_test: ${TESTS}/copy_test.cu
 	nvcc -o $@ $< -I ./include -arch=sm_70 -Xcompiler -fopenmp
 
 decompress_pcie:
 	${NCU} --kernel-name "decompress_fetch_cpu_kernel" --metrics pcie__read_bytes.sum.per_second python tests/decompression_thput.py 1
+
+sens_thresh: ${OUTPUT}
+	python tests/sens_threshold.py > ${OUTPUT}/sens_thresh.out
+	python scripts/get_threshold.py ${OUTPUT}/sens_thresh.out "1 2 4 8" >> ${OUTPUT}/sens_thresh.out
+
+sens_sweep: ${OUTPUT}
+	python tests/sens_sweep.py "pubmed citeseer cora reddit products" > ${OUTPUT}/sens_sweep.out
+	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 
 dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
