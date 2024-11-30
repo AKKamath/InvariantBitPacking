@@ -19,7 +19,10 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
     int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
 {
-    extern __shared__ int shmem[];
+    // For some reason template datatype gives error
+    extern __shared__ int temp_shmem[];
+    // So typecast to template
+    T *shmem = (T*)temp_shmem;
     // 32 elements for metadata, 64 elements for working data
     // = 96 elements per warp
     T *workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * (SHM_META + SHM_WORK) / sizeof(T)];
@@ -105,7 +108,11 @@ __global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_
     int compressed_len, int64_t SHM_META, int64_t SHM_WORK, IndexT *index_array = nullptr, 
     IndexT *offset_array = nullptr)
 {
-    extern __shared__ int shmem[];
+    // For some reason template datatype gives error
+    extern __shared__ int temp_shmem[];
+    // So typecast to template
+    T *shmem = (T*)temp_shmem;
+
     int offset = 0;
     T *workspace = (T*)&shmem[(threadIdx.y * (SHM_META + SHM_WORK)) / sizeof(T)];
     offset = (blockDim.y * (SHM_META + SHM_WORK)) / sizeof(T);
