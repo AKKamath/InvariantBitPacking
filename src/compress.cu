@@ -37,7 +37,8 @@ at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
         "Bitval tensor must accessible by CUDA device (GPU or pinned memory)");
 
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(dataset.dtype()));
-    TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4-byte or 8-byte datatype");
+    TORCH_CHECK(data_size == 1 || data_size == 2 || data_size == 4 || data_size == 8, 
+        "Input tensor must be 1, 2, 4, or 8-byte datatype");
 
     size_t data_size_mask = torch::elementSize(torch::typeMetaToScalarType(mask.dtype()));
     size_t data_size_bitval = torch::elementSize(torch::typeMetaToScalarType(bitval.dtype()));
@@ -123,6 +124,48 @@ at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
             else
                 ibp::check_compress_size_kernel<ull><<<num_vecs, 256, 0, stream>>>(
                     (ull*)dataset_data, num_vecs, vec_size, (ull*)mask_data, (ull*)bitval_data, 
+                    comp_sizes_data);
+        }
+    } else if(data_size == 2) {
+        if(index_array != nullptr) {
+            if(compress_ctr != nullptr)
+                ibp::check_compress_size_kernel<int16_t><<<num_vecs, 256, 0, stream>>>(
+                    (int16_t*)dataset_data, num_vecs, vec_size, (int16_t*)mask_data, (int16_t*)bitval_data, 
+                    comp_sizes_data, index_array, (ull*)compress_ctr);
+            else
+                ibp::check_compress_size_kernel<int16_t><<<num_vecs, 256, 0, stream>>>(
+                    (int16_t*)dataset_data, num_vecs, vec_size, (int16_t*)mask_data, (int16_t*)bitval_data, 
+                    comp_sizes_data, index_array);
+        }
+        else {
+            if(compress_ctr != nullptr)
+                ibp::check_compress_size_kernel<int16_t><<<num_vecs, 256, 0, stream>>>(
+                    (int16_t*)dataset_data, num_vecs, vec_size, (int16_t*)mask_data, (int16_t*)bitval_data, 
+                    comp_sizes_data, (void*)nullptr, (ull*)compress_ctr);
+            else
+                ibp::check_compress_size_kernel<int16_t><<<num_vecs, 256, 0, stream>>>(
+                    (int16_t*)dataset_data, num_vecs, vec_size, (int16_t*)mask_data, (int16_t*)bitval_data, 
+                    comp_sizes_data);
+        }
+    } else if(data_size == 1) {
+        if(index_array != nullptr) {
+            if(compress_ctr != nullptr)
+                ibp::check_compress_size_kernel<int8_t><<<num_vecs, 256, 0, stream>>>(
+                    (int8_t*)dataset_data, num_vecs, vec_size, (int8_t*)mask_data, (int8_t*)bitval_data, 
+                    comp_sizes_data, index_array, (ull*)compress_ctr);
+            else
+                ibp::check_compress_size_kernel<int8_t><<<num_vecs, 256, 0, stream>>>(
+                    (int8_t*)dataset_data, num_vecs, vec_size, (int8_t*)mask_data, (int8_t*)bitval_data, 
+                    comp_sizes_data, index_array);
+        }
+        else {
+            if(compress_ctr != nullptr)
+                ibp::check_compress_size_kernel<int8_t><<<num_vecs, 256, 0, stream>>>(
+                    (int8_t*)dataset_data, num_vecs, vec_size, (int8_t*)mask_data, (int8_t*)bitval_data, 
+                    comp_sizes_data, (void*)nullptr, (ull*)compress_ctr);
+            else
+                ibp::check_compress_size_kernel<int8_t><<<num_vecs, 256, 0, stream>>>(
+                    (int8_t*)dataset_data, num_vecs, vec_size, (int8_t*)mask_data, (int8_t*)bitval_data, 
                     comp_sizes_data);
         }
     }

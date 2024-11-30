@@ -13,10 +13,11 @@
 template <typename T>
 __inline__ __device__ int POPC(T val) {
     if constexpr(sizeof(T) == 1) { \
-        uint8_t val2 = *(uint8_t*)val; \
-        return __popc((unsigned)val2); \
+        unsigned val2 = 0; \
+        val2 |= *(uint8_t*)&val; \
+        return __popc(val2); \
     } else if constexpr(sizeof(T) == 2) { \
-        uint16_t val2 = *(uint16_t*)val; \
+        uint16_t val2 = *(uint16_t*)&val; \
         return __popc((unsigned)val2); \
     } else if constexpr(sizeof(T) == 4) { \
         return __popc(*(uint32_t*)&val); \
@@ -30,10 +31,10 @@ __inline__ __device__ int POPC(T val) {
 template <typename T>
 __inline__ __device__ int CLZ(T val) {
     if constexpr(sizeof(T) == 1) {
-        uint8_t val2 = *(uint8_t*)val;
+        uint8_t val2 = *(uint8_t*)&val;
         return __clz((unsigned)val2);
     } else if constexpr(sizeof(val) == 2) {
-        uint16_t val2 = *(uint16_t*)val;
+        uint16_t val2 = *(uint16_t*)&val;
         return __clz((unsigned)val2);
     } else if constexpr(sizeof(val) == 4) {
         return __clz(*(uint32_t*)&val);
@@ -49,10 +50,10 @@ __inline__ __device__ int CLZ(T val) {
 template <typename T>
 __inline__ int POPC(T val) {
     if constexpr(sizeof(val) == 1) { \
-        uint8_t val2 = *(uint8_t*)val; \
+        uint8_t val2 = *(uint8_t*)&val; \
         return __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 2) { \
-        uint16_t val2 = *(uint16_t*)val; \
+        uint16_t val2 = *(uint16_t*)&val; \
         return __builtin_popcount((unsigned)val2); \
     } else if constexpr(sizeof(val) == 4) { \
         return __builtin_popcount(*(uint32_t*)&val); \
