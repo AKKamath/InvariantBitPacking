@@ -134,6 +134,7 @@ __global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_
     }
     pipe.producer_commit();
     pipe.consumer_wait();
+    pipe.consumer_release();
     __syncthreads();
 
     int blockId = blockIdx.x * blockDim.y + threadIdx.y;
