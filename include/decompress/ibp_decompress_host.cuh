@@ -30,7 +30,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     cudaDeviceGetAttribute(&maxShmem, cudaDevAttrMaxSharedMemoryPerBlockOptin, device);
     // Warp-parallel implementation
     if(impl == 0) {
-        constexpr int SHM_META = 128;
+        constexpr int SHM_META = 32 * sizeof(T);
         constexpr int SHM_WORK = 64 * sizeof(T);
         auto decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
         // TODO: Change maxShmem based on executing GPU. Relevant for heterogeneous GPU machines
@@ -62,7 +62,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             THREADS.x /= 2;
             THREADS.y *= 2;
         }
-        int SHM_META = 128 * THREADS.x / DWARP_SIZE;
+        int SHM_META = 32 * sizeof(T) * THREADS.x / DWARP_SIZE;
         int SHM_WORK = 64 * sizeof(T) * THREADS.x / DWARP_SIZE;
 
         // Working space shared memory

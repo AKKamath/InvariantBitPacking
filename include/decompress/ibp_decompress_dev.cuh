@@ -47,7 +47,7 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         return start_offset + offset;
     }
     // Read can be completed with less than 32 threads if min_elems is small
-    if((min_elems != 1 && min_elems - offset <= 24 && !cont) || max_elems - offset <= 24) {
+    if((min_elems != 1 && (32 - (min_elems - offset)) * (int)sizeof(T) >= 32 && !cont) || (32 - (max_elems - offset)) * (int)sizeof(T) >= 32) {
         // Round up to nearest 32-byte boundary
         int add_val = (min_elems - offset + elems_per_32B - 1) / elems_per_32B * elems_per_32B;
         if(offset >= min_elems)
@@ -76,8 +76,8 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         }
         __syncwarp();
         //if(threadId == 0)
-        //    printf("%p: Read %d; offset %d, add_val %d\n", cpu_src, 
-        //        min(max_elems, offset + add_val), offset, add_val);
+        //    printf("%p: Read %d; offset %d, add_val %d; min_elems %d; max %d\n", cpu_src, 
+        //        min(max_elems, offset + add_val), offset, add_val, min_elems, max_elems);
         return start_offset + min(max_elems, offset + add_val);
     }
     int k;
@@ -402,17 +402,20 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
         
         if(threadIdx.x == blockDim.x - 1) {
             *(int*)shm_comm = (bitshift + cur_bitshift) / (sizeof(T) * 8);
+            DEB_PRINTF("Last elem read %d; off %ld; %d\n", *(int*)shm_comm, 
+                working_offset - bitmask_offset / sizeof(T), 
+                (int32_t) (1 + *(int*)shm_comm - working_offset + bitmask_offset / sizeof(T)));
         }
         __syncthreadsX();
-        int lastbit_read = *(int*)shm_comm;
+        int lastelem_read = *(int*)shm_comm;
         __syncthreadsX();
         //int lastbit_read = __any_true_blk((T)((bitshift + cur_bitshift) / (sizeof(T) * 8) > 
         //                                   working_offset - bitmask_offset / sizeof(T)), shm_comm);
-        if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
+        if(lastelem_read >= working_offset - bitmask_offset / sizeof(T)) {
             // Read next 128B of metadata
             working_offset = read_one_iter_blk(src, metadata, working_data, 
                 min(SHM_META / sizeof(T), (unsigned long)
-                    max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)), 
+                    max((int32_t) (1 + lastelem_read - working_offset + bitmask_offset / sizeof(T)), 
                         compressed_len - working_offset)), 
                 min(SHM_WORK / 2 / sizeof(T), (unsigned long)vec_size - working_offset), 
                 bitmask_offset, SHM_META, SHM_WORK, working_offset);
