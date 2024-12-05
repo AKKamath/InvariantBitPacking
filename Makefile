@@ -36,3 +36,12 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 ${DLRM}/feature_%_part0.npy:
 	mkdir -p ${DLRM}
 	wget --content-disposition 'https://api.ngc.nvidia.com/v2/models/org/nvidia/team/dle/dlrm_base_tf2_ckpt_ds-criteo-fl15/22.06_tf32/files?redirect=true&path=feature_$*_part0.npy' -O ${DLRM}/feature_$*_part0.npy
+
+${DLRM}/asteroid.f32:
+	mkdir -p ${DLRM}
+	wget https://dps.uibk.ac.at/~fabian/sc21-reproducibility/datasets/asteroid.f32.zst -o ${DLRM}/asteroid.f32.zst
+	unzstd ${DLRM}/asteroid.f32.zst
+
+kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
+	python tests/kmeans_asteroid.py > ${OUTPUT}/kmeans.out
+	python scripts/plot_kmeans.py ${OUTPUT}/kmeans.out ${OUTPUT}/kmeans

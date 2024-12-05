@@ -108,7 +108,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     int32_t *dev_centroids_count;
     int *host_centroid_count;
     //int32_t *dev_cluster;
-    T *masks, *multivals;
+    //T *masks, *multivals;
     int32_t *dist_vector, *host_vector;
     int32_t *host_pick, *dev_pick;
     cudaMalloc(&dev_pick, sizeof(int32_t));
@@ -126,16 +126,20 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         cudaMalloc(dev_cluster, num_vecs * sizeof(int32_t));
     cudaMalloc(&dev_centroids_count, num_centroids * sizeof(int32_t));
     cudaMallocHost(&host_centroid_count, num_centroids * sizeof(int));
-    cudaMalloc(&masks, num_centroids * vec_size * sizeof(T));
-    cudaMalloc(&multivals, num_centroids * vec_size * sizeof(T));
+    if(*comp_mask == nullptr)
+        cudaMalloc(comp_mask, num_centroids * vec_size * sizeof(T));
+    if(*comp_bitval == nullptr)
+        cudaMalloc(comp_bitval, num_centroids * vec_size * sizeof(T));
     cudaMemset(*dev_cluster, 0, num_vecs * sizeof(int32_t));
     //cudaMemcpy(index_arr, index_array, num_vecs * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemset(masks, -1, num_centroids * vec_size * sizeof(T));
-    cudaMemcpy(multivals, input_arr, vec_size * sizeof(T), cudaMemcpyHostToDevice);
+    cudaMemset(*comp_mask, -1, num_centroids * vec_size * sizeof(T));
+    cudaMemcpy(*comp_bitval, input_arr, vec_size * sizeof(T), cudaMemcpyHostToDevice);
     cudaMemcpy(dev_centroids, input_arr, vec_size * sizeof(T), cudaMemcpyHostToDevice);
     int *d_bits_set;
     cudaMalloc(&d_bits_set, num_centroids * vec_size * 8 * sizeof(T) * sizeof(int));
     cudaCheckError();
+
+    T *masks = *comp_mask, *multivals = *comp_bitval;
     
     // K-means++ initialization algorithm
     /*for(int i = 1; i < min((ull)num_centroids, num_vecs); ++i) {
@@ -248,15 +252,15 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
             num_vecs * vec_size * sizeof(T) * 8, (double)*h_counter * 100 / total_size);
         max_comp = max(max_comp, (float)*h_counter / total_size);
     }
-    DPRINTF("Centroids %d, compressed: %f\n", num_centroids, max_comp);
+    DPRINTF("Centroids %d, compressed: %f\n", used_centroids, max_comp);
     cudaFree(d_bits_set);
     cudaFree(dev_centroids);
     cudaFree(dev_pick);
     cudaFreeHost(host_pick);
     cudaFree(d_counter);
     cudaFreeHost(h_counter);
-    cudaFree(masks);
-    cudaFree(multivals);
+    //cudaFree(masks);
+    //cudaFree(multivals);
     //cudaFree(dev_cluster);
     cudaFree(dev_centroids_count);
     cudaFreeHost(host_centroid_count);
