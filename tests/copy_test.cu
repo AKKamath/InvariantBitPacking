@@ -11,7 +11,7 @@
 #define TIME_NOW std::chrono::high_resolution_clock::now()
 #define TIME_DIFF(a, b) std::chrono::duration_cast<std::chrono::nanoseconds>(b - a).count()
 
-#define GB (8 * 1024L * 1024L * 1024L)
+#define GB (32 * 1024L * 1024L * 1024L)
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -29,12 +29,14 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 #define GPU_CL_FLOATS (GPU_CL_SIZE / sizeof(D_WORD))
 
 char *cache;
+char *cache_cpu;
 size_t cache_size;
 int64_t *gpu_indices;
 
 void init_cache(size_t size, size_t index_size) {
     cache_size = size;
     gpuErrchk(cudaMalloc(&cache, size));
+    gpuErrchk(cudaMallocHost(&cache_cpu, size));
     gpuErrchk(cudaMalloc(&gpu_indices, index_size * sizeof(int64_t)));
 }
 
@@ -88,14 +90,34 @@ void check(char *data, int64_t *indices, size_t element_size, size_t array_size,
         name, i, (i * array_size / 1000000.0) / (TIME / 1000000000.0), TIME); \
     check(cpu_buffer, gpu_indices, i, array_size, flag);
 
+#define RUN_TEST_CPU(function, name) \
+    reset(); \
+    cudaDeviceSynchronize(); \
+    START = TIME_NOW; \
+    function(cpu_buffer, index_buffer, i, array_size); \
+    END = TIME_NOW; \
+    TIME = TIME_DIFF(START, END); \
+    printf("%s: Element %ld bytes | %.4f MBPS | %.0f ns\n", \
+        name, i, (i * array_size / 1000000.0) / (TIME / 1000000000.0), TIME); \
+    check(cpu_buffer, gpu_indices, i, array_size, flag);
 
-void transfer_cpu(char *data, int64_t *indices, size_t element_size, size_t array_size) {
+void transfer_cpu(char *data, int64_t *indices, size_t element_size, size_t array_size, int blks = 32, int threads = 512) {
+    //#pragma omp parallel for
+    for(int i = 0; i < array_size; ++i) {
+        uint64_t loc = indices[i];
+        gpuErrchk(cudaMemcpyAsync(&cache[(element_size * i) % (cache_size - element_size)], &data[element_size * loc], element_size, cudaMemcpyHostToDevice, 0));
+    }
+    cudaDeviceSynchronize();
+}
+
+void transfer_cpu2(char *data, int64_t *indices, size_t element_size, size_t array_size, int blks = 32, int threads = 512) {
     #pragma omp parallel for
     for(int i = 0; i < array_size; ++i) {
         uint64_t loc = indices[i];
-        gpuErrchk(cudaMemcpyAsync(&cache[(element_size * i) % cache_size], &data[element_size * loc], element_size, cudaMemcpyHostToDevice, 0));
+        memcpy(&cache_cpu[(element_size * i) % (cache_size - element_size)], &data[element_size * loc], element_size);
     }
-    cudaDeviceSynchronize();
+    gpuErrchk(cudaMemcpyAsync(cache, cache_cpu, element_size * array_size, cudaMemcpyHostToDevice));
+    gpuErrchk(cudaDeviceSynchronize());
 }
 
 __global__ void transfer_gpu_kernel_int(char* cache, const char* data, const int64_t* indices, int64_t dim, size_t len, int cache_size) {
@@ -283,8 +305,8 @@ void transfer_dgl(char *data, int64_t *indices, int64_t element_size, int64_t ar
     gpuErrchk(cudaDeviceSynchronize());
 }
 
-#define ARR_SIZE 7
-const long int array[] = {256, 512, 1024, 2048, 4096, 8192, 16384};
+#define ARR_SIZE 8
+const long int array[] = {256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
 
 __global__ void reset_data(char *array, size_t size) {
     int threadId = threadIdx.x + blockIdx.x * blockDim.x;
@@ -301,7 +323,7 @@ int main(int argc, char *argv[])
 
     fprintf(stderr, "Set device\n");
 
-    int64_t array_size = 100000;
+    int64_t array_size = 10000;
     const int64_t CACHE_SIZE = 1024 * 1024 * 1024;
     int64_t *index_buffer = (int64_t *)malloc(array_size * sizeof(int64_t));
     fprintf(stderr, "Allocated index buffer\n");
@@ -312,8 +334,8 @@ int main(int argc, char *argv[])
     init_cache(CACHE_SIZE, array_size);
     fprintf(stderr, "Init cache\n");
 
-    char *cpu_buffer = (char *)malloc(GB * sizeof(char));
     fprintf(stderr, "Alloc host data\n");
+    char *cpu_buffer = (char *)malloc(GB * sizeof(char));
     gpuErrchk(cudaHostRegister(cpu_buffer, GB * sizeof(char), cudaHostRegisterDefault));
 
     fprintf(stderr, "Register data\n");
@@ -335,12 +357,14 @@ int main(int argc, char *argv[])
         std::sort(index_buffer, index_buffer + array_size);
         gpuErrchk(cudaMemcpy(gpu_indices, index_buffer, array_size * sizeof(int64_t), cudaMemcpyHostToDevice));
         
-        RUN_TEST(transfer_gpu_int, "Copy");
-        RUN_TEST(transfer_gpu_align, "Aligned");
+        RUN_TEST_CPU(transfer_cpu, "CPU copy");
+        RUN_TEST_CPU(transfer_cpu2, "CPU index");
+        RUN_TEST(transfer_gpu_int, "GPU copy");
+        RUN_TEST(transfer_gpu_align, "Aligned GPU copy");
         //RUN_TEST(transfer_gpu_int64, "Bigint");
         //RUN_TEST(transfer_gpu_align2, "AlignedDeux");
         RUN_TEST(transfer_gpu_align_plus, "Aligned + Padded");
-        RUN_TEST(transfer_gpu_align_plus2, "AlignedPaddedAgain");
+        //RUN_TEST(transfer_gpu_align_plus2, "AlignedPaddedAgain");
 
         /*START = TIME_NOW;
         transfer_dgl(cpu_buffer, gpu_indices, i, array_size);
