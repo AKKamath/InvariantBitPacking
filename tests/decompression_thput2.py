@@ -1,5 +1,6 @@
 import torch
 import ibp_cuda as ibp
+from dgl.utils import gather_pinned_tensor_rows
 import time
 
 ITERS = 100
@@ -33,6 +34,17 @@ def transfer(tensor):
     torch.cuda.synchronize()
     end = time.time_ns()
     print(f"Transfer time: {(end - start) / 1e6 / ITERS:.3f}ms")
+    tot_time = (end - start) / 1e6 / ITERS
+    return tot_time
+
+def transfer2(tensor, indices_cuda):
+    torch.cuda.synchronize()
+    start = time.time_ns()
+    for i in range(ITERS):
+        tensor_copy = gather_pinned_tensor_rows(tensor, indices_cuda)
+    torch.cuda.synchronize()
+    end = time.time_ns()
+    print(f"Transfer2 time: {(end - start) / 1e6 / ITERS:.3f}ms")
     tot_time = (end - start) / 1e6 / ITERS
     return tot_time
 
@@ -80,7 +92,7 @@ TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.97]
 SIZES = [256, 1024, 4 * 1024]
 NUM_VECS = 100000
 #SIZES = [256, 400, 512]
-index_arr = None#torch.arange(NUM_VECS).to("cuda")
+index_arr = torch.arange(NUM_VECS).to("cuda")
 
 runtime = {}
 for j in SIZES:
@@ -90,12 +102,14 @@ for size in SIZES:
     print(f"Size: {size} bytes")
     # Create a tensor of size bytes
     tensor = torch.zeros([NUM_VECS, size // 4], dtype=torch.int32).pin_memory()
+    base_time = transfer2(tensor, index_arr)
     runtime[size][-1] = transfer(tensor)
     for rate in TARGET:
         mask, bitval = make_mask_and_bitval(tensor, rate)
         rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr, 0)
         tensor2 = torch.zeros([NUM_VECS, int(complen.item())], dtype=torch.int32).pin_memory()
         base_time = transfer(tensor2)
+        base_time = transfer2(tensor2, index_arr)
         #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 1)
         #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 2)
         runtime[size][rate] = base_time / time_taken
