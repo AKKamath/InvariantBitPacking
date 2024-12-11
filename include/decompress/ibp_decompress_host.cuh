@@ -123,6 +123,32 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             aligned_feature_size, index_sorted_ptr, return_len, ret_ptr,
             permutation_ptr);
     }
+    if(impl == 3) {
+        shmem_size = NTHREADS / DWARP_SIZE * vec_size * sizeof(T);
+        auto decomp_kernel = &decompress_fake_kernel<T, IndexT>;
+        // Need opt-in for large shmem allocations
+        if (shmem_size >= 48 * 1024) {
+            cudaFuncSetAttribute(decomp_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
+            cudaCheckError();
+        }
+        decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            compressed_len, index_array, offset_array);
+        cudaCheckError();
+    }
+    if(impl == 4) {
+        shmem_size = NTHREADS / DWARP_SIZE * vec_size * sizeof(T);
+        auto decomp_kernel = &decompress_fake_kernel2<T, IndexT>;
+        // Need opt-in for large shmem allocations
+        if (shmem_size >= 48 * 1024) {
+            cudaFuncSetAttribute(decomp_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
+            cudaCheckError();
+        }
+        decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            compressed_len, index_array, offset_array);
+        cudaCheckError();
+    }
     return;
 }
 } // namespace ibp

@@ -69,6 +69,100 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     }
 }
 
+
+template <typename T, typename IndexT = void>
+__global__ void decompress_fake_kernel(T *output, T *input, int64_t num_vecs, 
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
+    int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
+{
+    // For some reason template datatype gives error
+    extern __shared__ int temp_shmem[];
+    // So typecast to template
+    T *shmem = (T*)temp_shmem;
+    // 32 elements for metadata, 64 elements for working data
+    // = 96 elements per warp
+    T *workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * vec_size];
+    __syncthreads();
+
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int warpId = threadId / DWARP_SIZE;
+    int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    int laneId = threadId % DWARP_SIZE;
+    // Go through node list
+    for(int i = warpId; i < num_vecs; i += numWarps) {
+        __syncwarp();
+        int64_t input_ind = i;
+        int64_t output_ind = i;
+        if constexpr(!std::is_same<IndexT, void>::value) {
+            if(index_array != nullptr)
+                input_ind = index_array[i];
+            if(offset_array != nullptr)
+                output_ind = offset_array[i];
+        }
+        // Decompress and write data
+        if(bitmask[input_ind / 32] & (1 << (input_ind % 32))) {
+            // Read input
+            for(int iter = laneId; iter < compressed_len; iter += DWARP_SIZE)
+                workspace[iter] = input[input_ind * vec_size + iter];
+            //memcpy_warp(workspace, &input[input_ind * vec_size], compressed_len);
+            __syncwarp();
+            // Write to output
+            for(int iter = laneId; iter < vec_size; iter += DWARP_SIZE)
+                output[output_ind * vec_size + iter] = workspace[iter % compressed_len];
+        } else {
+            //memcpy_warp(&output[output_ind * vec_size], 
+            //    &input[input_ind * vec_size], vec_size);
+        }
+    }
+}
+
+
+template <typename T, typename IndexT = void>
+__global__ void decompress_fake_kernel2(T *output, T *input, int64_t num_vecs, 
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
+    int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
+{
+    // For some reason template datatype gives error
+    extern __shared__ int temp_shmem[];
+    // So typecast to template
+    T *shmem = (T*)temp_shmem;
+    // 32 elements for metadata, 64 elements for working data
+    // = 96 elements per warp
+    T *workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * vec_size];
+    __syncthreads();
+
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int warpId = threadId / DWARP_SIZE;
+    int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    int laneId = threadId % DWARP_SIZE;
+    // Go through node list
+    for(int i = warpId; i < num_vecs; i += numWarps) {
+        __syncwarp();
+        int64_t input_ind = i;
+        int64_t output_ind = i;
+        if constexpr(!std::is_same<IndexT, void>::value) {
+            if(index_array != nullptr)
+                input_ind = index_array[i];
+            if(offset_array != nullptr)
+                output_ind = offset_array[i];
+        }
+        // Decompress and write data
+        if(bitmask[input_ind / 32] & (1 << (input_ind % 32))) {
+            // Read input
+            for(int iter = laneId; iter < compressed_len; iter += DWARP_SIZE)
+                workspace[iter] = input[input_ind * vec_size + iter];
+            //memcpy_warp(workspace, &input[input_ind * vec_size], compressed_len);
+            __syncwarp();
+            // Write to output
+            //for(int iter = laneId; iter < vec_size; iter += DWARP_SIZE)
+            //    output[output_ind * vec_size + iter] = workspace[iter % compressed_len];
+        } else {
+            //memcpy_warp(&output[output_ind * vec_size], 
+            //    &input[input_ind * vec_size], vec_size);
+        }
+    }
+}
+
 template <typename DType, typename IdType>
 __global__ void IndexSelectMultiKernelAligned(
     const DType* const input, const int64_t input_len,

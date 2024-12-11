@@ -76,23 +76,23 @@ def compress_decompress(tensor, mask, bitval, index_arr, impl=None):
     torch.cuda.synchronize()
     end = time.time_ns()
     tot_time = (end - start) / 1e6 / ITERS
-    print(f"{ratio*100:.0f}%", end="\t")
+    print(f"{ratio*100:.0f}% {complen}", end="\t")
     print(f"Decompress time: {(end - start) / 1e6 / ITERS:.3f}ms")
 
-    if(not torch.equal(tensor, decomp_tensor.to(torch.device('cpu')))):
-        print("mismatch")
-        print("Original ", tensor)
-        print("Decompressed ", decomp_tensor)
+    #if(not torch.equal(tensor, decomp_tensor.to(torch.device('cpu')))):
+    #    print("mismatch")
+    #    print("Original ", tensor)
+    #    print("Decompressed ", decomp_tensor)
     return ratio.item(), tot_time, complen
 
 # Turn on debug print messages
 #ibp.print_debug(True)
 
-TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.97]
+TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95]
 SIZES = [256, 1024, 4 * 1024]
 NUM_VECS = 100000
 #SIZES = [256, 400, 512]
-index_arr = torch.arange(NUM_VECS).to("cuda")
+index_arr_orig = torch.arange(NUM_VECS).to("cuda")
 
 runtime = {}
 for j in SIZES:
@@ -102,14 +102,16 @@ for size in SIZES:
     print(f"Size: {size} bytes")
     # Create a tensor of size bytes
     tensor = torch.zeros([NUM_VECS, size // 4], dtype=torch.int32).pin_memory()
-    base_time = transfer2(tensor, index_arr)
+    base_time = transfer2(tensor, index_arr_orig)
     runtime[size][-1] = transfer(tensor)
     for rate in TARGET:
         mask, bitval = make_mask_and_bitval(tensor, rate)
-        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr, 0)
+        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 0)
         tensor2 = torch.zeros([NUM_VECS, int(complen.item())], dtype=torch.int32).pin_memory()
         base_time = transfer(tensor2)
-        base_time = transfer2(tensor2, index_arr)
+        base_time = transfer2(tensor2, index_arr_orig)
+        rate, base_time, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 3)
+        rate, fake_time, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 4)
         #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 1)
         #rate, time_taken = compress_decompress(tensor, mask, bitval, index_arr, 2)
         runtime[size][rate] = base_time / time_taken
