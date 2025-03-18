@@ -57,7 +57,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
 
     double max_saved = 0;
     int avg_comp_size = 0;
-    DPRINTF("Num elems: %d\n", num_vecs);
+    DPRINTF("Num elems: %llu\n", num_vecs);
     for(threshold = min_thresh; threshold <= max_thresh; threshold += 0.05) {
         // Construct mask and bitval based on threshold
         cudaMemset(d_mask, 0, vec_size * sizeof(T));
@@ -78,7 +78,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         check_feats<<<320, 512, 0, stream>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
-        DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %ld, %.3f%%)\n", threshold, *h_bits_saved, 
+        DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %llu, %.3f%%)\n", threshold, *h_bits_saved, 
             num_vecs * vec_size * sizeof(T) * 8, (double)*h_bits_saved * 100.0 / (num_vecs * vec_size * sizeof(T) * 8.0));
         // Store the mask/value for max compressed format
         if(*h_bits_saved > max_saved) {
@@ -239,7 +239,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     }*/
 
    float max_comp = 0;
-    DPRINTF("Num nodes: %ld, num_centroids %d, used centroids %d\n", num_vecs, num_centroids, used_centroids);
+    DPRINTF("Num nodes: %llu, num_centroids %u, used centroids %d\n", num_vecs, num_centroids, used_centroids);
     for(float threshold = 0.7; threshold <= 1.0; threshold += 0.05) {
         cudaMemset(d_counter, 0, sizeof(long long unsigned));
         create_mask_many<<<160, 256>>>(input_arr, vec_size, num_vecs, masks, multivals, num_centroids, dev_centroids_count, *dev_cluster, threshold);
@@ -248,7 +248,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         cudaCheckError();
         cudaMemcpy(h_counter, d_counter, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         float total_size = num_vecs * vec_size * sizeof(T) * 8.0;
-        DPRINTF("KMeans %f: counts %llu (Total %ld, %.3f%%)\n", threshold, *h_counter, 
+        DPRINTF("KMeans %f: counts %llu (Total %llu, %.3f%%)\n", threshold, *h_counter, 
             num_vecs * vec_size * sizeof(T) * 8, (double)*h_counter * 100 / total_size);
         max_comp = max(max_comp, (float)*h_counter / total_size);
     }
