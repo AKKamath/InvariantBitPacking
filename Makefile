@@ -1,18 +1,22 @@
 TESTS = ./tests
 BUILD = ./build
-NCU=/home/x_kamathak/miniforge3/envs/dgl-dev-gpu-117/bin/../nsight-compute/2022.2.0/ncu
 DLRM ?= ./dlrm_feats
 OUTPUT = ./results
+NCU=$(which ncu)
 
 ${OUTPUT}:
 	mkdir -p ${OUTPUT}
 
-copy_test: ${BUILD}/copy_test ${OUTPUT}
-	./${BUILD}/copy_test > ${OUTPUT}/output.txt
+copy_test: ${BUILD}/copy_test.exe ${OUTPUT}
+	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
 	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
 
-${BUILD}/copy_test: ${TESTS}/copy_test.cu
-	nvcc -o $@ $< -I ./include -arch=sm_70 -Xcompiler -fopenmp
+copy_test2: ${BUILD}/copy_test2.exe ${OUTPUT}
+	./${BUILD}/copy_test2.exe > ${OUTPUT}/output.txt
+	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
+
+${BUILD}/%.exe: ${TESTS}/%.cu
+	nvcc -o $@ $< -I ./include -arch=sm_70 -gencode arch=compute_80,code=sm_80  -gencode arch=compute_90,code=sm_90 -Xcompiler -fopenmp
 
 decompress_pcie:
 	${NCU} --kernel-name "decompress_fetch_cpu_kernel" --metrics pcie__read_bytes.sum.per_second python tests/decompression_thput.py 1
