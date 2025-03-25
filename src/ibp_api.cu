@@ -87,7 +87,7 @@ at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape,
     // Replace the old data_ptr and allocator with the new ones
     c10::StorageImpl* origStorageImpl = origStorage.unsafeGetStorageImpl();
     c10::StorageImpl* newStorageImpl = newStorage.unsafeGetStorageImpl();
-    origStorageImpl->set_data_ptr(std::move(newStorageImpl->data_ptr()));
+    origStorageImpl->set_data_ptr(std::move(newStorageImpl->mutable_data_ptr()));
     origStorageImpl->set_allocator(newStorageImpl->allocator());
 
     // Copy from file into tensor
