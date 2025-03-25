@@ -37,12 +37,12 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
         if(maxShmem >= 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META)) {
             shmem_size = 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META);
             decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, T, IndexT>;
-            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
+            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
                 shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
         } else {
             shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
             decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
-            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
+            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
                 shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
         }
         // Need opt-in for large shmem allocations
@@ -77,12 +77,12 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
         if(maxShmem >= SHM_TOT) {
             shmem_size = SHM_TOT;
             decomp_kernel = &decompress_fetch_cpu_tb_kernel<true, T, IndexT>;
-            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
+            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
                 shmem_size, maxShmem, vec_size, SHM_TOT);
         } else {
             shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
             decomp_kernel = &decompress_fetch_cpu_tb_kernel<false, T, IndexT>;
-            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %d, required = %lu)\n", 
+            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
                 shmem_size, maxShmem, vec_size, SHM_TOT);
         }
         // Need opt-in for large shmem allocations
