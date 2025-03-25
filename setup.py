@@ -18,6 +18,8 @@ cc_flag.append("-gencode")
 cc_flag.append("arch=compute_70,code=sm_70")
 cc_flag.append("-gencode")
 cc_flag.append("arch=compute_80,code=sm_80")
+cc_flag.append("-gencode")
+cc_flag.append("arch=compute_90,code=sm_90")
 
 repo_dir = Path(this_dir).parent
 sources = [
@@ -84,5 +86,6 @@ setup(
     install_requires=[
         "packaging",
         "ninja",
+        "torch",
     ],
 )
