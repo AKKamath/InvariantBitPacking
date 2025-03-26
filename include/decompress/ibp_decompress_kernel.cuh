@@ -14,9 +14,9 @@ __global__ void range_kernel(IndexT *array, int start, int end)
         array[i] = start + i;
 }
 
-template <bool FITS_SHMEM, int SHM_META, int SHM_WORK, typename T, typename IndexT = void>
-__global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vecs, 
-    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
+template <bool FITS_SHMEM, int SHM_META, int SHM_WORK, bool ASYNC=false, typename T, typename IndexT = void>
+__global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vecs,
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size,
     int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
 {
     // For some reason template datatype gives error
@@ -28,10 +28,17 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     T *workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * (SHM_META + SHM_WORK) / sizeof(T)];
     // Retain shmem_size as the number of elements in shmem thingies
     shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
+    size_t start_offset = (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
+    int *async_bitmask;
+    if constexpr(ASYNC) {
+        async_bitmask = &temp_shmem[start_offset / sizeof(int) + (threadIdx.x / DWARP_SIZE)];
+        start_offset += (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (sizeof(int32_t));
+        shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (sizeof(int32_t));
+    }
     // Convert bytes to elements per shm_mask/shm_bitval array
     shmem_size /= 2;
-    T *shm_mask = (T*)&shmem[(blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK) / sizeof(T)];
-    T *shm_bitval = (T*)&shmem[(blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK) / sizeof(T) + shmem_size / sizeof(T)];
+    T *shm_mask = (T*)&shmem[start_offset / sizeof(T)];
+    T *shm_bitval = (T*)&shmem[start_offset / sizeof(T) + shmem_size / sizeof(T)];
     cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
     pipe.producer_acquire();
     for(int i = threadIdx.x; i < shmem_size / sizeof(T); i += blockDim.x) {
@@ -45,6 +52,7 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     int threadId = threadIdx.x + blockIdx.x * blockDim.x;
     int warpId = threadId / DWARP_SIZE;
     int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    int read_bitmask = -1;
     // Go through node list
     for(int i = warpId; i < num_vecs; i += numWarps) {
         __syncwarp();
@@ -56,14 +64,35 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
             if(offset_array != nullptr)
                 output_ind = offset_array[i];
         }
+        if constexpr(ASYNC) {
+            async_commit();
+            async_waitall();
+            __syncwarp();
+            // First iteration, must read directly
+            if(read_bitmask == -1)
+                read_bitmask = bitmask[input_ind / 32];
+            else
+                read_bitmask = *async_bitmask;
+            __syncwarp();
+
+            if(i + numWarps < num_vecs && threadIdx.x % DWARP_SIZE == 0) {
+                int64_t new_ind = i + numWarps;
+                if constexpr(!std::is_same<IndexT, void>::value) {
+                    new_ind = index_array[i + numWarps];
+                }
+                async_cp(async_bitmask, &bitmask[new_ind / 32], 1);
+            }
+        } else {
+            read_bitmask = bitmask[input_ind / 32];
+        }
         // Decompress and write data
-        if(bitmask[input_ind / 32] & (1 << (input_ind % 32))) {
-            decompress_fetch_cpu<FITS_SHMEM, SHM_META, SHM_WORK>(
-                &output[output_ind * vec_size], &input[input_ind * vec_size], 
-                shm_mask, shm_bitval, vec_size, compressed_len, 
+        if(read_bitmask & (1 << (input_ind % 32))) {
+            decompress_fetch_cpu<FITS_SHMEM, SHM_META, SHM_WORK, ASYNC>(
+                &output[output_ind * vec_size], &input[input_ind * vec_size],
+                shm_mask, shm_bitval, vec_size, compressed_len,
                 workspace, dev_mask, dev_bitval, shmem_size);
         } else {
-            memcpy_warp(&output[output_ind * vec_size], 
+            memcpy_warp<ASYNC>(&output[output_ind * vec_size],
                 &input[input_ind * vec_size], vec_size);
         }
     }
@@ -71,8 +100,8 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
 
 
 template <typename T, typename IndexT = void>
-__global__ void decompress_fake_kernel(T *output, T *input, int64_t num_vecs, 
-    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
+__global__ void decompress_fake_kernel(T *output, T *input, int64_t num_vecs,
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size,
     int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
 {
     // For some reason template datatype gives error
@@ -110,16 +139,16 @@ __global__ void decompress_fake_kernel(T *output, T *input, int64_t num_vecs,
             for(int iter = laneId; iter < vec_size; iter += DWARP_SIZE)
                 output[output_ind * vec_size + iter] = workspace[iter % compressed_len];
         } else {
-            //memcpy_warp(&output[output_ind * vec_size], 
-            //    &input[input_ind * vec_size], vec_size);
+            memcpy_warp(&output[output_ind * vec_size],
+                &input[input_ind * vec_size], vec_size);
         }
     }
 }
 
 
 template <typename T, typename IndexT = void>
-__global__ void decompress_fake_kernel2(T *output, T *input, int64_t num_vecs, 
-    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
+__global__ void decompress_fake_kernel2(T *output, T *input, int64_t num_vecs,
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size,
     int compressed_len, IndexT *index_array = nullptr, IndexT *offset_array = nullptr)
 {
     // For some reason template datatype gives error
@@ -157,7 +186,7 @@ __global__ void decompress_fake_kernel2(T *output, T *input, int64_t num_vecs,
             //for(int iter = laneId; iter < vec_size; iter += DWARP_SIZE)
             //    output[output_ind * vec_size + iter] = workspace[iter % compressed_len];
         } else {
-            //memcpy_warp(&output[output_ind * vec_size], 
+            //memcpy_warp(&output[output_ind * vec_size],
             //    &input[input_ind * vec_size], vec_size);
         }
     }
@@ -197,9 +226,9 @@ __global__ void IndexSelectMultiKernelAligned(
 
 
 template <bool FITS_SHMEM, typename T, typename IndexT = void>
-__global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_vecs, 
-    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size, 
-    int compressed_len, int64_t SHM_META, int64_t SHM_WORK, IndexT *index_array = nullptr, 
+__global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_vecs,
+    int64_t vec_size, T *dev_mask, T *dev_bitval, int32_t *bitmask, int shmem_size,
+    int compressed_len, int64_t SHM_META, int64_t SHM_WORK, IndexT *index_array = nullptr,
     IndexT *offset_array = nullptr)
 {
     // For some reason template datatype gives error
@@ -245,9 +274,9 @@ __global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_
         }
         // Decompress and write data
         if(bitmask[in_index / 32] & (1 << (in_index % 32))) {
-            decompress_fetch_blk_cpu<FITS_SHMEM>(&output[out_index * vec_size], 
-                &input[in_index * vec_size], shm_mask, shm_bitval, vec_size, 
-                compressed_len, workspace, shm_comm, SHM_META, SHM_WORK, dev_mask, dev_bitval, 
+            decompress_fetch_blk_cpu<FITS_SHMEM>(&output[out_index * vec_size],
+                &input[in_index * vec_size], shm_mask, shm_bitval, vec_size,
+                compressed_len, workspace, shm_comm, SHM_META, SHM_WORK, dev_mask, dev_bitval,
                 shmem_size);
         } else {
             memcpy_block(&output[out_index * vec_size], &input[in_index * vec_size], vec_size);

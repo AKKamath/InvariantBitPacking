@@ -6,7 +6,7 @@
 #include <math.h>
 namespace ibp {
 template <typename T, typename IndexT=void>
-void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size, 
+void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     T *mask, T *bitval, int32_t *bitmask, int compressed_len,
     cudaStream_t stream = 0, int blks = 32, int threads = 512, int impl=-1,
     IndexT *index_array = nullptr, IndexT *offset_array = nullptr) {
@@ -15,12 +15,12 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     if(impl == -1) {
         // If it's 2x or more compressed, the TB-parallel doesn't
         // generate enough memory accesses fast enough
-        if(vec_size / compressed_len > 2)
+        if(vec_size / compressed_len >= 2)
             impl = 0; // Warp-parallel
         else
             impl = 1; // TB-parallel
     }
-    
+
     int NBLOCKS = blks;
     int NTHREADS = threads;
 
@@ -29,20 +29,28 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     cudaGetDevice(&device);
     cudaDeviceGetAttribute(&maxShmem, cudaDevAttrMaxSharedMemoryPerBlockOptin, device);
     // Warp-parallel implementation
-    if(impl == 0) {
+    if(impl == 0 || impl == 5) {
         constexpr int SHM_META = 32 * sizeof(T);
         constexpr int SHM_WORK = 64 * sizeof(T);
-        auto decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
+        const int SHM_ASYNC = (impl == 5 ? sizeof(int) : 0);
+        auto decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, false, T, IndexT>;
         // TODO: Change maxShmem based on executing GPU. Relevant for heterogeneous GPU machines
-        if(maxShmem >= 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META)) {
-            shmem_size = 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META);
-            decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, T, IndexT>;
-            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
-                shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
+        if(maxShmem >= 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META + SHM_ASYNC)) {
+            shmem_size = 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META + SHM_ASYNC);
+            if (impl == 0)
+                decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, false, T, IndexT>;
+            else
+                decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, true, T, IndexT>;
+
+            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n",
+                shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META + SHM_ASYNC));
         } else {
             shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
-            decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, T, IndexT>;
-            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
+            if (impl == 0)
+                decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, false, T, IndexT>;
+            else
+                decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, true, T, IndexT>;
+            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n",
                 shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
         }
         // Need opt-in for large shmem allocations
@@ -51,10 +59,10 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             cudaCheckError();
         }
         decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
-            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size,
             compressed_len, index_array, offset_array);
         cudaCheckError();
-    } 
+    }
     // Threadblock-parallel implementation
     else if(impl == 1) {
         dim3 THREADS(NTHREADS, 1, 1);
@@ -77,12 +85,12 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
         if(maxShmem >= SHM_TOT) {
             shmem_size = SHM_TOT;
             decomp_kernel = &decompress_fetch_cpu_tb_kernel<true, T, IndexT>;
-            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
+            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %d)\n",
                 shmem_size, maxShmem, vec_size, SHM_TOT);
         } else {
             shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
             decomp_kernel = &decompress_fetch_cpu_tb_kernel<false, T, IndexT>;
-            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n", 
+            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %d)\n",
                 shmem_size, maxShmem, vec_size, SHM_TOT);
         }
         // Need opt-in for large shmem allocations
@@ -91,7 +99,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             cudaCheckError();
         }
         decomp_kernel<<<NBLOCKS, THREADS, shmem_size, stream>>>(
-            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size,
             compressed_len, SHM_META, SHM_WORK, index_array, offset_array);
         cudaCheckError();
     }
@@ -107,7 +115,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
 
         const IndexT* index_sorted_ptr = index_array;
         const int64_t* permutation_ptr = nullptr;
-        
+
         if constexpr(!std::is_same<IndexT, void>::value)
             permutation_ptr = offset_array;
         constexpr int BLOCK_SIZE = 1024;
@@ -132,7 +140,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             cudaCheckError();
         }
         decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
-            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size,
             compressed_len, index_array, offset_array);
         cudaCheckError();
     }
@@ -145,7 +153,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             cudaCheckError();
         }
         decomp_kernel<<<NBLOCKS, NTHREADS, shmem_size, stream>>>(
-            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size, 
+            output, input, num_vecs, vec_size, mask, bitval, bitmask, shmem_size,
             compressed_len, index_array, offset_array);
         cudaCheckError();
     }

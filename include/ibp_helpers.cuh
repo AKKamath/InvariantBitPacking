@@ -41,7 +41,7 @@ __inline__ __device__ int CLZ(T val) {
     } else if constexpr(sizeof(val) == 8) {
         return __clzll(*(uint64_t*)&val);
     } else {
-        static_assert(sizeof(val) <= 4 || 
+        static_assert(sizeof(val) <= 4 ||
             sizeof(val) == 8, "Data type must be 4 or 8 bytes");
     }
 }
@@ -85,6 +85,37 @@ extern bool ibp_print_debug;
     }                                                          \
   }
 
+__device__ __forceinline__
+void async_cp(int *shared, const int *global, int ints) {
+    for(int i = 0; i < ints; i++)
+#if __CUDA_ARCH__ >= 800
+        asm volatile ("cp.async.ca.shared.global [%0], [%1], 4;" :: "l" (shared + i), "l" (global + i));
+#else
+        shared[i] = global[i];
+#endif
+}
+
+__device__ __forceinline__
+void async_commit() {
+#if __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.commit_group;");
+#endif
+}
+
+__device__ __forceinline__
+void async_waitone() {
+#if __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.wait_group 1;");
+#endif
+}
+
+__device__ __forceinline__
+void async_waitall() {
+#if __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.wait_all;");
+#endif
+}
+
 /**
  * @brief Optimized padded, aligned CPU to GPU data copy function.
  *
@@ -98,8 +129,9 @@ extern bool ibp_print_debug;
  * @note The function assumes that the source and destination pointers are
  *       4-byte-aligned.
  */
-typedef uint32_t WORD; 
-__inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int size) 
+typedef uint32_t WORD;
+template <bool async=false>
+__inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int size)
 {
     int threadId = threadIdx.x % DWARP_SIZE;
     // Offset: First element offset that is CL aligned
@@ -112,21 +144,31 @@ __inline__ __device__ void memcpy_warp_4byte(WORD *dest, const WORD *src, int si
 
     for(int k = threadId + align_offset; k < size + padding; k += DWARP_SIZE) {
         // Selective write to GPU memory
-        if(k < size)
-            *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+        if(k < size) {
+            if constexpr(async)
+                async_cp((int*)(((WORD *)dest) + k), (int*)((WORD *)src) + k, 1);
+            else
+                *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+        }
     }
 
     for(int k = threadId; k < align_offset; k += DWARP_SIZE) {
         // Selective write to GPU memory
-        if(k >= 0)
-            *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+        if(k >= 0) {
+            if constexpr(async)
+                async_cp((int*)(((WORD *)dest) + k), (int*)(((WORD *)src) + k), 1);
+            else
+                *(((WORD *)dest) + k) = *(((WORD *)src) + k);
+        }
     }
+    if constexpr(async)
+        async_commit();
     __syncwarp();
 
 }
 
-typedef uint64_t WORD64; 
-__inline__ __device__ void memcpy_warp_8byte(WORD64 *dest, const WORD64 *src, int size) 
+typedef uint64_t WORD64;
+__inline__ __device__ void memcpy_warp_8byte(WORD64 *dest, const WORD64 *src, int size)
 {
     int threadId = threadIdx.x % DWARP_SIZE;
     // Offset: First element offset that is CL aligned
@@ -145,19 +187,19 @@ __inline__ __device__ void memcpy_warp_8byte(WORD64 *dest, const WORD64 *src, in
 }
 
 /**
- * @brief Wrapper for generic data type copies. It only supports data types 
+ * @brief Wrapper for generic data type copies. It only supports data types
  * that are multiples of 4 in size or powers of two, such as 1, 2, 4, 8, 12, 16, etc.
  * For example, 11 byte-sized data types are not supported.
- * 
+ *
  * @tparam T Data type
  * @param dest Destination memory pointer
  * @param src Source memory pointer
  * @param length Number of elements to copy
  */
-template <typename T>
-__inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length) 
+template <bool async=false, typename T>
+__inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length)
 {
-    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0, 
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0,
         "Data type size must be 1 byte, 2 bytes, or multiple of 4 bytes");
 
     /*
@@ -172,7 +214,7 @@ __inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length)
 
     uint64_t bytes = length * sizeof(T);
     int elements = bytes / sizeof(WORD);
-    memcpy_warp_4byte((WORD*)dest, (WORD*)src, elements);
+    memcpy_warp_4byte<async>((WORD*)dest, (WORD*)src, elements);
     __syncwarp();
 
     // Manually copy the leftover non-4-byte-aligned parts
@@ -188,9 +230,9 @@ __inline__ __device__ void memcpy_warp(T *dest, const T *src, size_t length)
 }
 
 template <typename T>
-__inline__ __device__ void memcpy_block(T *dest, const T *src, size_t length) 
+__inline__ __device__ void memcpy_block(T *dest, const T *src, size_t length)
 {
-    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0, 
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) % sizeof(WORD) == 0,
         "Data type size must be 1 byte, 2 bytes, or multiple of 4 bytes");
 
     int threadId = threadIdx.x;
@@ -285,7 +327,7 @@ __inline__ __device__ T blkExclusiveScanSync(T val, T *shm_com)
     // Last thread lets other threads in blk know value
     if(threadIdx.x % DWARP_SIZE == DWARP_SIZE - 1)
         shm_com[threadIdx.x / DWARP_SIZE] = val;
-    
+
     __syncthreadsX();
     // Inter-warp scan now
     for(int i = threadIdx.x / DWARP_SIZE; i > 0; --i) {

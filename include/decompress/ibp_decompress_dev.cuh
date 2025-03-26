@@ -6,9 +6,9 @@
 
 namespace ibp {
 // Read one iteration of data from CPU to shared memory
-template<int SHM_META, int SHM_WORK, typename T>
-__inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_working, 
-    int min_elems, int max_elems, int bitmask_offset, int start_offset = 0) 
+template<int SHM_META, int SHM_WORK, bool async=false, typename T>
+__inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_working,
+    int min_elems, int max_elems, int bitmask_offset, int start_offset = 0)
 {
     int threadId = threadIdx.x % DWARP_SIZE;
     const int offset = ((DWARP_SIZE * sizeof(T) - (((uint64_t)(cpu_src + start_offset)) % (DWARP_SIZE * sizeof(T)))) % (DWARP_SIZE * sizeof(T))) / sizeof(T);
@@ -28,13 +28,16 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         //T src_data = *((cpu_src + start_offset) + k);
         // Selective write to GPU memory
         if(k >= 0 && k < max_elems) {
-            *dest_element = *((cpu_src + start_offset) + k);
+            if constexpr(async)
+                async_cp((int*)dest_element, (int*)((cpu_src + start_offset) + k), sizeof(T) / sizeof(int));
+            else
+                *dest_element = *((cpu_src + start_offset) + k);
             DEB_PRINTF("%d [%ld]: %x\n", start_offset + k, (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T)), *dest_element);
-            
+
             /*unsigned int mask = __activemask();
             if(k % 32 == 0) {
-                DEB_PRINTF("1. Write %d bytes; num_threads %d; %p; min %d max %d\n", 
-                    (int)(__popc(mask) * sizeof(int32_t)), sub_val, 
+                DEB_PRINTF("1. Write %d bytes; num_threads %d; %p; min %d max %d\n",
+                    (int)(__popc(mask) * sizeof(int32_t)), sub_val,
                     cpu_src + start_offset, min_elems, max_elems);
             }*/
         }
@@ -44,6 +47,8 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
     if(offset >= min_elems && !cont) {
         //if(threadId == 0)
         //    printf("%p: Read %d (offset)\n", cpu_src, offset);
+        if constexpr(async)
+            async_commit();
         return start_offset + offset;
     }
     // Read can be completed with less than 32 threads if min_elems is small
@@ -63,21 +68,26 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
             //T src_data = *((cpu_src + start_offset) + k);
             // Selective write to GPU memory
             if(k >= 0 && k < max_elems) {
-                *dest_element = *((cpu_src + start_offset) + k);
+                if constexpr(async)
+                    async_cp((int*)dest_element, (int*)((cpu_src + start_offset) + k), sizeof(T) / sizeof(int));
+                else
+                    *dest_element = *((cpu_src + start_offset) + k);
                 DEB_PRINTF("%d [%ld]: %x\n", start_offset + k, (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T)), *dest_element);
-                
+
                 /*unsigned int mask = __activemask();
                 if(k % 32 == 0) {
-                    DEB_PRINTF("1b. Write %d bytes; num_threads %d; %p; min %d max %d\n", 
-                        (int)(__popc(mask) * sizeof(int32_t)), add_val, 
+                    DEB_PRINTF("1b. Write %d bytes; num_threads %d; %p; min %d max %d\n",
+                        (int)(__popc(mask) * sizeof(int32_t)), add_val,
                         cpu_src + start_offset, min_elems, max_elems);
                 }*/
             }
         }
         __syncwarp();
         //if(threadId == 0)
-        //    printf("%p: Read %d; offset %d, add_val %d; min_elems %d; max %d\n", cpu_src, 
+        //    printf("%p: Read %d; offset %d, add_val %d; min_elems %d; max %d\n", cpu_src,
         //        min(max_elems, offset + add_val), offset, add_val, min_elems, max_elems);
+        if constexpr(async)
+            async_commit();
         return start_offset + min(max_elems, offset + add_val);
     }
     int k;
@@ -93,13 +103,16 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
         //T src_data = *((cpu_src + start_offset) + k);
         // Selective write to GPU memory
         if(k < max_elems) {
-            *dest_element = *((cpu_src + start_offset) + k);
+            if constexpr(async)
+                async_cp((int*)dest_element, (int*)((cpu_src + start_offset) + k), sizeof(T) / sizeof(int));
+            else
+                *dest_element = *((cpu_src + start_offset) + k);
             DEB_PRINTF("%d [%ld]: %x\n", start_offset + k, (k + start_offset - bitmask_offset / sizeof(T)) % (SHM_WORK / sizeof(T)), *dest_element);
-            
+
             /*unsigned int mask = __activemask();
             if(k % 32 == 0) {
-                DEB_PRINTF("2. Write %d bytes; offset %d; min+onset %d; %p; min %d max %d\n", 
-                (int)(__popc(mask) * sizeof(int32_t)), offset, min_elems + onset, 
+                DEB_PRINTF("2. Write %d bytes; offset %d; min+onset %d; %p; min %d max %d\n",
+                (int)(__popc(mask) * sizeof(int32_t)), offset, min_elems + onset,
                 cpu_src + start_offset, min_elems, max_elems);
             }*/
         }
@@ -107,14 +120,16 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
     __syncwarp();
 
     //if(threadId == 0)
-    //    printf("%p: Read %d; min %d, offset %d, onset %d\n", cpu_src, 
+    //    printf("%p: Read %d; min %d, offset %d, onset %d\n", cpu_src,
     //        min(max_elems, min_elems + offset + onset), min_elems, offset, onset);
+    if constexpr(async)
+        async_commit();
     return start_offset + min(max_elems, min_elems + offset + onset);
 }
 
 // Function to decompress and write vectors; optimized for src in CPU memory
-template<bool FITS_SHMEM, int SHM_META, int SHM_WORK, typename T>
-__inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src, 
+template<bool FITS_SHMEM, int SHM_META, int SHM_WORK, bool ASYNC=false, typename T>
+__inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     T *shm_mask, T *shm_bitval, const int32_t vec_size, const int32_t compressed_len, T *workspace,
     const T *dev_mask = nullptr, const T *dev_bitval = nullptr, int shmem_elems = 0) {
     int laneId = threadIdx.x % DWARP_SIZE;
@@ -127,25 +142,25 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     T *working_data = workspace + SHM_META / sizeof(T);
     int metadata_offset = 0, working_offset = 0;
     // Read up to 64elems/256B from src buffer
-    int offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 1, 
+    int offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data, 1,
         min(bitmask_offset < SHM_META ? SHM_WORK / sizeof(T) : SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
 
     if(offset > bitmask_offset / sizeof(T)) {
         metadata_offset = bitmask_offset / sizeof(T);
         working_offset = offset;
         /*if(laneId == 0)
-        DEB_PRINTF("Offset: %d, Metadata offset = %d, working offset = %d\n", 
+        DEB_PRINTF("Offset: %d, Metadata offset = %d, working offset = %d\n",
             offset, metadata_offset, working_offset);*/
     } else {
         metadata_offset = offset;
         // Only read metadata so far, so read working data now
         working_offset = bitmask_offset / sizeof(T);
-        working_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
-                            min(SHM_META / sizeof(T), (unsigned long)vec_size), 
-                            min(SHM_WORK / sizeof(T), (unsigned long)vec_size), 
+        working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+                            min(SHM_META / sizeof(T), (unsigned long)vec_size),
+                            min(SHM_WORK / sizeof(T), (unsigned long)vec_size),
                             bitmask_offset, working_offset);
         /*if(laneId == 0)
-        DEB_PRINTF("Offset: %d, Metadata offset = %d, working offset = %d\n", 
+        DEB_PRINTF("Offset: %d, Metadata offset = %d, working offset = %d\n",
             offset, metadata_offset, working_offset);*/
     }
 
@@ -160,12 +175,12 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         read_metadata = __ballot_sync(FULL_MASK, read_metadata);
         if(read_metadata) {
             // Read next 128B of metadata
-            metadata_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
-                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
-                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
+            metadata_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
+                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 bitmask_offset, metadata_offset);
             /*if(laneId == 0)
-                DEB_PRINTF("2. [Added] Metadata offset = %d, working offset = %d\n", 
+                DEB_PRINTF("2. [Added] Metadata offset = %d, working offset = %d\n",
                     metadata_offset, working_offset);*/
         }
         int32_t cur_bitshift = 0;
@@ -196,17 +211,17 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         int lastbit_read = __shfl_sync(FULL_MASK, (bitshift + cur_bitshift) / (sizeof(T) * 8), DWARP_SIZE - 1);
         if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
             // Read next 128B of metadata
-            working_offset = read_one_iter<SHM_META, SHM_WORK>(src, metadata, working_data, 
+            working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
                 min(SHM_META / sizeof(T), (unsigned long)
-                    max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)), 
-                        compressed_len - working_offset)), 
-                min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset), 
+                    max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)),
+                        compressed_len - working_offset)),
+                min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
                 bitmask_offset, working_offset);
             /*if(laneId == 0)
-                DEB_PRINTF("3. Metadata offset = %d, [Added] working offset = %d\n", 
+                DEB_PRINTF("3. Metadata offset = %d, [Added] working offset = %d\n",
                     metadata_offset, working_offset);*/
         }
-        
+
         // Now decompress
         if(i < vec_size) {
             int32_t num_bits = cur_bitshift;
@@ -245,7 +260,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
                 int32_t bit_offset = bitshift % T_bits;
                 int32_t read_bits = min(temp_read_size, T_bits - bit_offset);
                 temp_dest |= ((working_data[(bitshift / T_bits) % (SHM_WORK / sizeof(T))] << bit_offset) & (((1L << read_bits) - 1L) << (T_bits - read_bits))) >> fin_read_bits;
-                DEB_PRINTF("%p, %d: Temp dest %x, working data %x; working offset %d, bitshift %d\n", dest, i, 
+                DEB_PRINTF("%p, %d: Temp dest %x, working data %x; working offset %d, bitshift %d\n", dest, i,
                     temp_dest, working_data[(bitshift / T_bits) % (SHM_WORK / sizeof(T))],
                     working_offset, bitshift);
                 fin_read_bits += read_bits;
@@ -272,8 +287,8 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
 }
 
 template<typename T>
-__inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *shm_working, 
-    int min_elems, int max_elems, int bitmask_offset, int SHM_META, int SHM_WORK, int start_offset = 0) 
+__inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *shm_working,
+    int min_elems, int max_elems, int bitmask_offset, int SHM_META, int SHM_WORK, int start_offset = 0)
 {
     constexpr int ELEM_PER_32B = (32 / sizeof(T));
     constexpr int ELEM_PER_128B = (128 / sizeof(T));
@@ -283,7 +298,7 @@ __inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *sh
     int elems = (ELEM_PER_128B - offset) % ELEM_PER_128B;
     if(elems < min_elems)
         elems += min_elems + (ELEM_PER_32B - (min_elems % ELEM_PER_32B)) % ELEM_PER_32B;
-    
+
     for(int k = threadIdx.x - offset; k < elems; k += blockDim.x) {
         T *dest_element;
         if(k + start_offset < bitmask_offset / sizeof(T)) {
@@ -305,7 +320,7 @@ __inline__ __device__ int read_one_iter_blk(const T *cpu_src, T *shm_meta, T *sh
 }
 
 template<typename T>
-__inline__ __device__ T __any_true_blk(T val, T *shm_com) 
+__inline__ __device__ T __any_true_blk(T val, T *shm_com)
 {
     *shm_com = 0;
     __syncthreadsX();
@@ -323,10 +338,10 @@ __inline__ __device__ T __any_true_blk(T val, T *shm_com)
 
 // Function to decompress and write vectors; optimized for src in CPU memory
 template<bool FITS_SHMEM, typename T>
-__inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src, 
-    T *shm_mask, T *shm_bitval, const int32_t vec_size, const int32_t compressed_len, 
-    T *workspace, T *shm_comm, int64_t SHM_META, int64_t SHM_WORK, 
-    const T *dev_mask = nullptr, const T *dev_bitval = nullptr, 
+__inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
+    T *shm_mask, T *shm_bitval, const int32_t vec_size, const int32_t compressed_len,
+    T *workspace, T *shm_comm, int64_t SHM_META, int64_t SHM_WORK,
+    const T *dev_mask = nullptr, const T *dev_bitval = nullptr,
     int shmem_elems = 0) {
     int64_t bitmask_offset = BITS_TO_BYTES(vec_size);
     // Datatype align
@@ -337,9 +352,9 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
     T *working_data = workspace + SHM_META / sizeof(T);
     int metadata_offset = 0, working_offset = 0;
     // Read up to 64elems/256B from src buffer
-    int offset = read_one_iter_blk(src, metadata, working_data, 
-        min(SHM_META / sizeof(T), (unsigned long)compressed_len), 
-        min(bitmask_offset < SHM_META ? SHM_WORK / sizeof(T) : SHM_META / sizeof(T), 
+    int offset = read_one_iter_blk(src, metadata, working_data,
+        min(SHM_META / sizeof(T), (unsigned long)compressed_len),
+        min(bitmask_offset < SHM_META ? SHM_WORK / sizeof(T) : SHM_META / sizeof(T),
         (unsigned long)compressed_len), bitmask_offset, SHM_META, SHM_WORK);
 
     if(offset > bitmask_offset / sizeof(T)) {
@@ -349,13 +364,13 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
         metadata_offset = offset;
         // Only read metadata so far, so read working data now
         working_offset = bitmask_offset / sizeof(T);
-        working_offset = read_one_iter_blk(src, metadata, working_data, 
-                            min(SHM_META / sizeof(T), (unsigned long)vec_size), 
-                            min(SHM_WORK / sizeof(T), (unsigned long)vec_size), 
+        working_offset = read_one_iter_blk(src, metadata, working_data,
+                            min(SHM_META / sizeof(T), (unsigned long)vec_size),
+                            min(SHM_WORK / sizeof(T), (unsigned long)vec_size),
                             bitmask_offset, SHM_META, SHM_WORK, working_offset);
     }
     //if(threadIdx.x == 0)
-    //    DEB_PRINTF("%p: Offset: %d, Metadata offset = %d, working offset = %d\n", 
+    //    DEB_PRINTF("%p: Offset: %d, Metadata offset = %d, working offset = %d\n",
     //        dest, offset, metadata_offset, working_offset);
 
     // Code to decompress
@@ -369,9 +384,9 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
         read_metadata = __any_true_blk(read_metadata, shm_comm);
         if(read_metadata) {
             // Read next 128B of metadata
-            metadata_offset = read_one_iter_blk(src, metadata, working_data, 
-                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
-                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset), 
+            metadata_offset = read_one_iter_blk(src, metadata, working_data,
+                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
+                min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 bitmask_offset, SHM_META, SHM_WORK, metadata_offset);
         }
         int32_t cur_bitshift = 0;
@@ -399,31 +414,31 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
         // Perform scan to obtain starting bit for this thread
         bitshift += blkExclusiveScanSync(cur_bitshift, (int32_t*)shm_comm);
         // See whether last thread's bitshift exceeds current data in shared memory
-        
+
         if(threadIdx.x == blockDim.x - 1) {
             *(int*)shm_comm = (bitshift + cur_bitshift) / (sizeof(T) * 8);
-            DEB_PRINTF("Last elem read %d; off %ld; %d\n", *(int*)shm_comm, 
-                working_offset - bitmask_offset / sizeof(T), 
+            DEB_PRINTF("Last elem read %d; off %ld; %d\n", *(int*)shm_comm,
+                working_offset - bitmask_offset / sizeof(T),
                 (int32_t) (1 + *(int*)shm_comm - working_offset + bitmask_offset / sizeof(T)));
         }
         __syncthreadsX();
         int lastelem_read = *(int*)shm_comm;
         __syncthreadsX();
-        //int lastbit_read = __any_true_blk((T)((bitshift + cur_bitshift) / (sizeof(T) * 8) > 
+        //int lastbit_read = __any_true_blk((T)((bitshift + cur_bitshift) / (sizeof(T) * 8) >
         //                                   working_offset - bitmask_offset / sizeof(T)), shm_comm);
         if(lastelem_read >= working_offset - bitmask_offset / sizeof(T)) {
             // Read next 128B of metadata
-            working_offset = read_one_iter_blk(src, metadata, working_data, 
+            working_offset = read_one_iter_blk(src, metadata, working_data,
                 min(SHM_META / sizeof(T), (unsigned long)
-                    max((int32_t) (1 + lastelem_read - working_offset + bitmask_offset / sizeof(T)), 
-                        compressed_len - working_offset)), 
-                min(SHM_WORK / 2 / sizeof(T), (unsigned long)vec_size - working_offset), 
+                    max((int32_t) (1 + lastelem_read - working_offset + bitmask_offset / sizeof(T)),
+                        compressed_len - working_offset)),
+                min(SHM_WORK / 2 / sizeof(T), (unsigned long)vec_size - working_offset),
                 bitmask_offset, SHM_META, SHM_WORK, working_offset);
             //if(threadIdx.x == 0)
-            //    DEB_PRINTF("%p: Offset: %d, Metadata offset = %d, working offset = %d\n", 
+            //    DEB_PRINTF("%p: Offset: %d, Metadata offset = %d, working offset = %d\n",
             //        dest, offset, metadata_offset, working_offset);
         }
-        
+
         // Now decompress
         if(i < vec_size) {
             int32_t num_bits = cur_bitshift;
@@ -463,7 +478,7 @@ __inline__ __device__ void decompress_fetch_blk_cpu(T *dest, const T *src,
                 int32_t bit_offset = bitshift % T_bits;
                 int32_t read_bits = min(temp_read_size, T_bits - bit_offset);
                 temp_dest |= ((working_data[(bitshift / T_bits) % (SHM_WORK / sizeof(T))] << bit_offset) & (((1L << read_bits) - 1L) << (T_bits - read_bits))) >> fin_read_bits;
-                DEB_PRINTF("%p, %d: Temp dest %x, working data %x; working offset %d, bitshift %d\n", dest, i, 
+                DEB_PRINTF("%p, %d: Temp dest %x, working data %x; working offset %d, bitshift %d\n", dest, i,
                     temp_dest, working_data[(bitshift / T_bits) % (SHM_WORK / sizeof(T))],
                     working_offset, bitshift);
                 fin_read_bits += read_bits;
