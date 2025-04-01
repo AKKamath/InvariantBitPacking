@@ -1,5 +1,6 @@
 import torch
 import ibp as ibp
+import numpy as np
 import math
 import sys
 import os
@@ -23,29 +24,41 @@ def ibp_ify(dataset):
     return (1 - (torch.sum(sizes) / (dataset.element_size() * dataset.nelement()))) * 100 + 3
 
 def bitpack(dataset: torch.Tensor):
-    tensor1 = dataset.view(torch.int32)
-    tensor = tensor1
-    min_values, _ = torch.min(tensor, dim=0)
-    max_values, _ = torch.max(tensor, dim=0)
+    dim1, dim2 = 0, 1
+    tensor1 = dataset.numpy()
+    tensor1 = tensor1.view('uint32')
+    tensor1 = tensor1.astype('int64')
+    tensor = torch.from_numpy(tensor1)
+    min_values, _ = torch.min(tensor, dim=dim1)
+    max_values, _ = torch.max(tensor, dim=dim1)
     # Typecast up to avoid integer overflow
     max_values = max_values.to(torch.int64)
     min_values = min_values.to(torch.int64)
     diff = max_values - min_values + 1
     diff = torch.ceil(torch.log2(diff))
     diff = torch.nansum(diff)
-    return (1 - diff / (tensor.shape[1] * 32)) * 100
+    return (1 - diff / (tensor.shape[dim2] * 32)) * 100
 
 def bitpack_group(dataset: torch.Tensor):
+    dim1, dim2 = 0, 1
     tensor_size = 100
-    tensor1 = dataset.view(torch.int32)
+    #tensor1 = dataset.view(torch.int32)
     sums = 0
-    val = tensor1.shape[0] // tensor_size
+    val = dataset.shape[dim1] // tensor_size
     #print(val)
     for i in range(val):
-        tensor = tensor1[i * tensor_size : (i + 1) * tensor_size]
+        tensor1 = dataset[i * tensor_size : (i + 1) * tensor_size].numpy()
+        #print(tensor1)
+        tensor1 = tensor1.view('uint32')
+        #print(tensor1)
+        tensor1 = tensor1.astype('int64')
+        #print(tensor1)
+        tensor1 = torch.from_numpy(tensor1)
+        #print(tensor1)
+        tensor = tensor1
         #print(tensor.shape)
-        min_values, _ = torch.min(tensor, dim=0)
-        max_values, _ = torch.max(tensor, dim=0)
+        min_values, _ = torch.min(tensor, dim=dim1)
+        max_values, _ = torch.max(tensor, dim=dim1)
         max_values = max_values.to(torch.int64)
         min_values = min_values.to(torch.int64)
         #print(min_values.shape)
@@ -53,10 +66,10 @@ def bitpack_group(dataset: torch.Tensor):
         #print(min_values, max_values)
         diff = max_values - min_values + 1
         diff = torch.ceil(torch.log2(diff))
-        #print(diff.shape)
+        #print(diff)
         sums += torch.nansum(diff)
     #print((1 - sums / (val * dataset.shape[1] * 32)) * 100)
-    return (1 - sums / (val * dataset.shape[1] * 32)) * 100
+    return (1 - sums / (val * dataset.shape[dim2] * 32)) * 100
 
 #ibp.print_debug(True)
 datasets = sys.argv[1].split()
