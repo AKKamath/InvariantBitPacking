@@ -87,12 +87,15 @@ extern bool ibp_print_debug;
 
 __device__ __forceinline__
 void async_cp(int *shared, const int *global, int ints) {
-    for(int i = 0; i < ints; i++)
+    for(int i = 0; i < ints; i++) {
 #if __CUDA_ARCH__ >= 800
-        asm volatile ("cp.async.ca.shared.global [%0], [%1], 4;" :: "l" (shared + i), "l" (global + i));
+        int* shared_ptr;
+        asm volatile ("cvta.to.shared.u64 %0, %1;" :"=l" (shared_ptr) : "l" (shared + i));
+        asm volatile ("cp.async.ca.shared.global [%0], [%1], 4;" :: "l" (shared_ptr), "l" (global + i));
 #else
         shared[i] = global[i];
 #endif
+    }
 }
 
 __device__ __forceinline__
