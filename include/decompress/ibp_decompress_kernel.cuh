@@ -25,29 +25,34 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     T *shmem = (T*)temp_shmem;
     // 32 elements for metadata, 64 elements for working data
     // = 96 elements per warp
-    T *workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * (SHM_META + SHM_WORK) / sizeof(T)];
-    // Retain shmem_size as the number of elements in shmem thingies
-    shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
-    size_t start_offset = (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
-    int *async_bitmask;
+    T *workspace;
+    size_t start_offset = 0;
+    int *async_bitmask = nullptr;
     if constexpr(ASYNC) {
+        workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * (SHM_META + 2 * SHM_WORK) / sizeof(T)];
+        shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + 2 * SHM_WORK);
+        start_offset = (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + 2 * SHM_WORK);
+
         async_bitmask = &temp_shmem[start_offset / sizeof(int) + (threadIdx.x / DWARP_SIZE)];
-        start_offset += (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (sizeof(int32_t));
         shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (sizeof(int32_t));
+        start_offset += (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (sizeof(int32_t));
+    } else {
+        workspace = (T*)&shmem[(threadIdx.x / DWARP_SIZE) * (SHM_META + SHM_WORK) / sizeof(T)];
+        // Retain shmem_size as the number of elements in shmem thingies
+        shmem_size -= (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
+        start_offset = (blockDim.x + DWARP_SIZE - 1) / DWARP_SIZE * (SHM_META + SHM_WORK);
     }
     // Convert bytes to elements per shm_mask/shm_bitval array
     shmem_size /= 2;
     T *shm_mask = (T*)&shmem[start_offset / sizeof(T)];
     T *shm_bitval = (T*)&shmem[start_offset / sizeof(T) + shmem_size / sizeof(T)];
-    cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-    pipe.producer_acquire();
     for(int i = threadIdx.x; i < shmem_size / sizeof(T); i += blockDim.x) {
-        cuda::memcpy_async(&shm_mask[i], &dev_mask[i], sizeof(T), pipe);
-        cuda::memcpy_async(&shm_bitval[i], &dev_bitval[i], sizeof(T), pipe);
+        async_cp(&shm_mask[i], &dev_mask[i], sizeof(T) / sizeof(int));
+        async_cp(&shm_bitval[i], &dev_bitval[i], sizeof(T) / sizeof(int));
     }
-    pipe.producer_commit();
-    pipe.consumer_wait();
+    async_commit();
     __syncthreads();
+    async_waitall();
 
     int threadId = threadIdx.x + blockIdx.x * blockDim.x;
     int warpId = threadId / DWARP_SIZE;

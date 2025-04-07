@@ -128,7 +128,7 @@ __inline__ __device__ int read_one_iter(const T *cpu_src, T *shm_meta, T *shm_wo
 }
 
 // Function to decompress and write vectors; optimized for src in CPU memory
-template<bool FITS_SHMEM, int SHM_META, int SHM_WORK, bool ASYNC=false, typename T>
+template<bool FITS_SHMEM, int SHM_META, int SHM_WORK_BASE, bool ASYNC=false, typename T>
 __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     T *shm_mask, T *shm_bitval, const int32_t vec_size, const int32_t compressed_len, T *workspace,
     const T *dev_mask = nullptr, const T *dev_bitval = nullptr, int shmem_elems = 0) {
@@ -136,14 +136,15 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
     int64_t bitmask_offset = BITS_TO_BYTES(vec_size);
     // Datatype align
     bitmask_offset = (bitmask_offset + sizeof(T) - 1) / sizeof(T) * sizeof(T);
+    constexpr int SHM_WORK = ASYNC ? SHM_WORK_BASE * 2 : SHM_WORK_BASE;
 
     // Shared memory buffers
     T *metadata = workspace;
     T *working_data = workspace + SHM_META / sizeof(T);
-    int metadata_offset = 0, working_offset = 0;
+    int metadata_offset = 0, working_offset = 0, async_offset = 0;
     // Read up to 64elems/256B from src buffer
-    int offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data, 1,
-        min(bitmask_offset < SHM_META ? SHM_WORK / sizeof(T) : SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
+    int offset = read_one_iter<SHM_META, SHM_WORK, false>(src, metadata, working_data, 1,
+        min(bitmask_offset < SHM_META ? SHM_WORK_BASE / sizeof(T) : SHM_META / sizeof(T), (unsigned long)vec_size), bitmask_offset);
 
     if(offset > bitmask_offset / sizeof(T)) {
         metadata_offset = bitmask_offset / sizeof(T);
@@ -155,13 +156,20 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         metadata_offset = offset;
         // Only read metadata so far, so read working data now
         working_offset = bitmask_offset / sizeof(T);
-        working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+        working_offset = read_one_iter<SHM_META, SHM_WORK, false>(src, metadata, working_data,
                             min(SHM_META / sizeof(T), (unsigned long)vec_size),
-                            min(SHM_WORK / sizeof(T), (unsigned long)vec_size),
+                            min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size),
                             bitmask_offset, working_offset);
         /*if(laneId == 0)
         DEB_PRINTF("Offset: %d, Metadata offset = %d, working offset = %d\n",
             offset, metadata_offset, working_offset);*/
+    }
+
+    if constexpr(ASYNC) {
+        async_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+            min(SHM_META / sizeof(T), (unsigned long)(compressed_len - working_offset)),
+            min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
+            bitmask_offset, working_offset);
     }
 
     // Code to decompress
@@ -175,7 +183,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         read_metadata = __ballot_sync(FULL_MASK, read_metadata);
         if(read_metadata) {
             // Read next 128B of metadata
-            metadata_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+            metadata_offset = read_one_iter<SHM_META, SHM_WORK, false>(src, metadata, working_data,
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 bitmask_offset, metadata_offset);
@@ -210,13 +218,32 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         // See whether last thread's bitshift exceeds current data in shared memory
         int lastbit_read = __shfl_sync(FULL_MASK, (bitshift + cur_bitshift) / (sizeof(T) * 8), DWARP_SIZE - 1);
         if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
-            // Read next 128B of metadata
-            working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
-                min(SHM_META / sizeof(T), (unsigned long)
-                    max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)),
-                        compressed_len - working_offset)),
-                min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
-                bitmask_offset, working_offset);
+            if constexpr(ASYNC) {
+                async_waitall();
+                working_offset = async_offset;
+                if (lastbit_read >= async_offset - bitmask_offset / sizeof(T)) {
+                    // Async data is not enough, read more data in non-async mode
+                    working_offset = read_one_iter<SHM_META, SHM_WORK, false>(src, metadata, working_data,
+                        min(SHM_META / sizeof(T), (unsigned long)
+                            max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)),
+                                compressed_len - working_offset)),
+                        min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
+                        bitmask_offset, working_offset);
+                }
+                // Read next iter of working_data in async mode
+                async_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+                    min(SHM_META / sizeof(T), (unsigned long)compressed_len - working_offset),
+                    min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
+                    bitmask_offset, working_offset);
+            } else {
+                // Read next 128B of metadata
+                working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+                    min(SHM_META / sizeof(T), (unsigned long)
+                        max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)),
+                            compressed_len - working_offset)),
+                    min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
+                    bitmask_offset, working_offset);
+            }
             /*if(laneId == 0)
                 DEB_PRINTF("3. Metadata offset = %d, [Added] working offset = %d\n",
                     metadata_offset, working_offset);*/
