@@ -17,11 +17,11 @@ namespace ibp {
  * @param comp_mask Returned mask for compression. Size is vec_size.
  * @param comp_bitval Returned bit values for compression. Size is vec_size.
  * @param threshold Fixed threshold for mask/bitval calculation. Default is -1, which means the best threshold will be found.
- * 
+ *
  * @return Average compressed length of each element.
  */
 template<typename T>
-int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask, 
+int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     T **comp_bitval, float threshold = -1.0, cudaStream_t stream = 0)
 {
     // Init data final mask and bitval for future use
@@ -70,15 +70,15 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         for(ull i = 0; i < vec_size; ++i) {
             popc += POPC(h_mask[i]);
         }
-        //DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, vec_size * sizeof(T) * 8, 
+        //DPRINTF("Saved %d bits of %d (%.2f%%)\n", popc, vec_size * sizeof(T) * 8,
         //    (double)(popc) * 100.0 / ((double)vec_size * sizeof(T) * 8.0));
-        
+
         // Count real bits saved in the dataset
         cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
         check_feats<<<320, 512, 0, stream>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
-        DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %llu, %.3f%%)\n", threshold, *h_bits_saved, 
+        DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %llu, %.3f%%)\n", threshold, *h_bits_saved,
             num_vecs * vec_size * sizeof(T) * 8, (double)*h_bits_saved * 100.0 / (num_vecs * vec_size * sizeof(T) * 8.0));
         // Store the mask/value for max compressed format
         if(*h_bits_saved > max_saved) {
@@ -102,7 +102,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
 
 // TODO: This
 template<typename T>
-void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask, 
+void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     T **comp_bitval, unsigned num_centroids, int32_t **dev_cluster, float threshold = -1.0)
 {
     int32_t *dev_centroids_count;
@@ -140,7 +140,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     cudaCheckError();
 
     T *masks = *comp_mask, *multivals = *comp_bitval;
-    
+
     // K-means++ initialization algorithm
     /*for(int i = 1; i < min((ull)num_centroids, num_vecs); ++i) {
         GPUMemset<<<32, 512>>>(dist_vector, INT_MAX, num_vecs);
@@ -152,7 +152,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         cudaMemcpy(host_vector, dist_vector, num_vecs * sizeof(int32_t), cudaMemcpyDeviceToHost);
         cudaCheckError();
         DPRINTF("%d: Picked %d; dist %d\n", i, *host_pick, host_vector[*host_pick]);
-        int64_t nodeId = //*host_pick;
+        int64_t nodeId = *host_pick;
         cudaMemcpy(&multivals[i * vec_size], &input_arr[nodeId * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
         cudaMemcpy(&dev_centroids[i * vec_size], &input_arr[nodeId * vec_size], vec_size * sizeof(T), cudaMemcpyHostToDevice);
         cudaCheckError();
@@ -212,7 +212,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
                     popc += POPC(h_mask[maskId]);
                 }
                 if(host_centroid_count[i])
-                    DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
+                    DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc,
                         vec_size * 32, (double)(popc) * 100.0 / ((double)vec_size * 32.0), host_centroid_count[i]);
             }
         }*/
@@ -234,7 +234,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
             popc += POPC(h_mask[maskId]);
         }
         if(host_centroid_count[i])
-            DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc, 
+            DPRINTF("Centroid %d: Set bits %d of %d (%f%%) for %d nodes\n", i, popc,
                 vec_size * 32, (double)(popc) * 100.0 / ((double)vec_size * 32.0), host_centroid_count[i]);
     }*/
 
@@ -248,7 +248,7 @@ void preproc_kmeans(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         cudaCheckError();
         cudaMemcpy(h_counter, d_counter, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         float total_size = num_vecs * vec_size * sizeof(T) * 8.0;
-        DPRINTF("KMeans %f: counts %llu (Total %llu, %.3f%%)\n", threshold, *h_counter, 
+        DPRINTF("KMeans %f: counts %llu (Total %llu, %.3f%%)\n", threshold, *h_counter,
             num_vecs * vec_size * sizeof(T) * 8, (double)*h_counter * 100 / total_size);
         max_comp = max(max_comp, (float)*h_counter / total_size);
     }
