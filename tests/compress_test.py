@@ -27,8 +27,8 @@ def do_the_process(orig_tensor, print_out = False):
 #ibp.print_debug(True)
 
 # Create a tensor
-sp_tensor32 = torch.randint(10, [100,100], dtype=torch.int32).pin_memory()
-sp_tensor64 = sp_tensor32.clone().pin_memory().view(dtype=torch.int64)
+sp_tensor32 = torch.rand([1200,128], dtype=torch.float32).pin_memory()
+sp_tensor64 = sp_tensor32.clone().pin_memory().view(dtype=torch.float64)
 do_the_process(sp_tensor32)
 do_the_process(sp_tensor64)
 
