@@ -15,10 +15,11 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
     if(impl == -1) {
         // If it's 2x or more compressed, the TB-parallel doesn't
         // generate enough memory accesses fast enough
-        if(vec_size / compressed_len >= 2)
+        /*if(vec_size / compressed_len >= 2)
             impl = 0; // Warp-parallel
         else
-            impl = 1; // TB-parallel
+            impl = 1; // TB-parallel*/
+        impl = 5;
     }
 
     int NBLOCKS = blks;

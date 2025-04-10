@@ -47,8 +47,8 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     T *shm_mask = (T*)&shmem[start_offset / sizeof(T)];
     T *shm_bitval = (T*)&shmem[start_offset / sizeof(T) + shmem_size / sizeof(T)];
     for(int i = threadIdx.x; i < shmem_size / sizeof(T); i += blockDim.x) {
-        async_cp(&shm_mask[i], &dev_mask[i], sizeof(T) / sizeof(int));
-        async_cp(&shm_bitval[i], &dev_bitval[i], sizeof(T) / sizeof(int));
+        async_cp((int*)&shm_mask[i], (int*)&dev_mask[i], sizeof(T) / sizeof(int));
+        async_cp((int*)&shm_bitval[i], (int*)&dev_bitval[i], sizeof(T) / sizeof(int));
     }
     async_commit();
     __syncthreads();
@@ -97,7 +97,7 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
                 shm_mask, shm_bitval, vec_size, compressed_len,
                 workspace, dev_mask, dev_bitval, shmem_size);
         } else {
-            memcpy_warp<ASYNC>(&output[output_ind * vec_size],
+            memcpy_warp<false>(&output[output_ind * vec_size],
                 &input[input_ind * vec_size], vec_size);
         }
     }
