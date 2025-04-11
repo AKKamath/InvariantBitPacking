@@ -189,7 +189,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         read_metadata = __ballot_sync(FULL_MASK, read_metadata);
         if(read_metadata) {
             // Read next 128B of metadata
-            metadata_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
+            metadata_offset = read_one_iter<SHM_META, SHM_WORK, false>(src, metadata, working_data,
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 min(SHM_META / sizeof(T), bitmask_offset / sizeof(T) - metadata_offset),
                 bitmask_offset, metadata_offset);
