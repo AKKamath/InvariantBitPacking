@@ -17,24 +17,24 @@ void cuda_deleter(void *ptr)
 }
 
 // Preprocessing functions
-std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset, 
+std::tuple<at::Tensor, at::Tensor> preprocess(const at::Tensor &dataset,
     c10::optional<float> threshold_);
-std::tuple<at::Tensor, at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset, 
+std::tuple<at::Tensor, at::Tensor, at::Tensor> preprocess_kmeans(const at::Tensor &dataset,
     int num_clusters, c10::optional<float> threshold_);
 
 // Compression functions
-at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask, 
+at::Tensor get_compress_size(const at::Tensor &dataset, const at::Tensor &mask,
     const at::Tensor &bitval, const c10::optional<at::Tensor> &index_array_,
     const c10::optional<at::Tensor> &compress_ctr_);
-at::Tensor compress_inplace(const at::Tensor &dataset, const at::Tensor &mask, 
+at::Tensor compress_inplace(const at::Tensor &dataset, const at::Tensor &mask,
     const at::Tensor &bitval, const c10::optional<at::Tensor> &index_array_);
-std::tuple<at::Tensor, at::Tensor> compress_condensed(const at::Tensor &dataset, 
-    const at::Tensor &mask, const at::Tensor &bitval, 
+std::tuple<at::Tensor, at::Tensor> compress_condensed(const at::Tensor &dataset,
+    const at::Tensor &mask, const at::Tensor &bitval,
     const c10::optional<at::Tensor> &index_array_);
 
 // Decompression functions
-at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask, 
-    const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device, 
+at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask,
+    const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device,
     const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_,
     const c10::optional<int> nblks_, const c10::optional<int> nthreads_, c10::optional<int> impl_);
 
@@ -48,7 +48,7 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape, 
+at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape,
     const py::object &dtype)
 {
     torch::ScalarType type = torch::python::detail::py_object_to_dtype(dtype);
@@ -70,7 +70,7 @@ at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape,
     const at::Storage& origStorage = tensor.storage();
 
     size_t tensor_size = origStorage.nbytes();
-    
+
     // Copied from pytorch/aten/src/ATen/StorageUtils.cpp
     int flags = at::ALLOCATOR_MAPPED_SHAREDMEM | at::ALLOCATOR_MAPPED_EXCLUSIVE |
         at::ALLOCATOR_MAPPED_KEEPFD | at::ALLOCATOR_MAPPED_UNLINK;
@@ -83,7 +83,7 @@ at::Tensor read_shared(const char* filename, std::vector<int64_t> &shape,
         std::move(sptr),
         /*allocator=*/nullptr,
         /*resizable=*/false));
-    
+
     // Replace the old data_ptr and allocator with the new ones
     c10::StorageImpl* origStorageImpl = origStorage.unsafeGetStorageImpl();
     c10::StorageImpl* newStorageImpl = newStorage.unsafeGetStorageImpl();
