@@ -105,3 +105,54 @@
         cudaFree(device_compressed_ptrs); \
         cudaCheckError(); \
     }
+
+template<typename T>
+__global__ void flat_copy_kernel(T *input_features, T *output_features,
+    int64_t total_vecs, int64_t vec_size)
+{
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int warpId = threadId / DWARP_SIZE;
+    int laneId = threadIdx.x % DWARP_SIZE;
+    int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    for(int i = warpId; i < total_vecs; i += numWarps) {
+        // Flat copy
+        for(int j = laneId; j < vec_size; j += DWARP_SIZE) {
+            output_features[i * vec_size + j] = input_features[i * vec_size + j];
+        }
+    }
+}
+
+
+/*template<bool FITS_SHMEM>
+__global__ void test_decompressed_features_kernel(
+    int32_t *mask, int32_t *bitval, int32_t *input_features, int32_t *output_features,
+    int64_t total_nodes, int64_t feature_len, int32_t *bitmask, int chunk_size = 4)
+{
+    extern __shared__ int32_t shared_mem[];
+    int32_t *shm_mask = shared_mem, *shm_bitval = &shared_mem[feature_len];
+    if constexpr(FITS_SHMEM) {
+        for(int i = threadIdx.x; i < feature_len; i += blockDim.x) {
+            shm_mask[i] = mask[i];
+            shm_bitval[i] = bitval[i];
+        }
+    } else {
+        shm_mask = mask;
+        shm_bitval = bitval;
+    }
+    __syncthreads();
+
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int warpId = threadId / DWARP_SIZE;
+    int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
+    for(int i = warpId; i < total_nodes; i += numWarps) {
+        // Compressed insert
+        if(bitmask[i / 32] & (1 << (i % 32))){
+            decompress_and_write(&output_features[i * feature_len], (int32_t *)&input_features[i * feature_len],
+                shm_mask, shm_bitval, feature_len, chunk_size);
+        } else {
+            memcpy_warp(&output_features[i * feature_len],
+                        &input_features[i * feature_len], feature_len);
+        }
+        __syncwarp();
+    }
+}*/

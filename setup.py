@@ -18,8 +18,8 @@ cc_flag.append("-gencode")
 cc_flag.append("arch=compute_70,code=sm_70")
 cc_flag.append("-gencode")
 cc_flag.append("arch=compute_80,code=sm_80")
-cc_flag.append("-gencode")
-cc_flag.append("arch=compute_90,code=sm_90")
+#cc_flag.append("-gencode")
+#cc_flag.append("arch=compute_90,code=sm_90")
 
 repo_dir = Path(this_dir).parent
 sources = [
@@ -62,6 +62,25 @@ ext_modules.append(
         sources=sources,
         include_dirs=[Path(this_dir) / i for i in include_dirs],
         depends=sources + include_files,
+        extra_compile_args={
+            "cxx": ["-O3", "-std=c++17"],
+            "nvcc": nvcc_flags + cc_flag,
+        },
+    )
+)
+
+test_src = ["src/compress_test.cu"]
+test_libs = ["nvcomp", "ndzip-cuda", "ndzip"]
+test_includes = ["ndzip/include"]
+test_lib_dirs = ["ndzip/build/"]
+ext_modules.append(
+    CUDAExtension(
+        name="ibp_cuda_test",
+        sources=test_src,
+        include_dirs=[Path(this_dir) / i for i in include_dirs + test_includes],
+        libraries=test_libs,
+        library_dirs=[str(Path(this_dir) / i) for i in test_lib_dirs],
+        depends=test_src + include_files,
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
             "nvcc": nvcc_flags + cc_flag,

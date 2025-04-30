@@ -1,0 +1,3 @@
+[submodule "ndzip"]
+	path = ndzip
+	url = git@github.com:AKKamath/ndzip.git
