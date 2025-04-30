@@ -6,9 +6,9 @@ namespace ibp {
 // Count number of bits set and unset in the input array
 template<typename T>
 __global__ void count_bit_kernel(T *input_arr, ull num_vecs, ull vec_size, int32_t *bit_count) {
-    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, 
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8,
         "Data type must be castable to integer");
-    
+
     __shared__ int32_t bit_ctr[128 * sizeof(T) * 8];
     int32_t *my_ctr = &bit_ctr[threadIdx.x * sizeof(T) * 8];
     for(ull j = threadIdx.x; j < vec_size; j += blockDim.x) {
@@ -51,7 +51,7 @@ __global__ void create_mask(int32_t *bit_count, T *mask, T *vals, ull num_vecs, 
 }
 
 template<typename T>
-__global__ void check_feats(T *input_arr, ull num_vecs, ull vec_size, 
+__global__ void check_feats(T *input_arr, ull num_vecs, ull vec_size,
                             T *mask, T *vals, ull *bits_saved) {
     // Store running bits saved count
     __shared__ ull bit_ctr;

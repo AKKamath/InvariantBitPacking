@@ -76,6 +76,8 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         // Count real bits saved in the dataset
         cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
         check_feats<<<320, 512, 0, stream>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
+        cudaStreamSynchronize(stream);
+        cudaCheckError();
         cudaMemcpy(h_bits_saved, d_bits_saved, sizeof(long long unsigned), cudaMemcpyDeviceToHost);
         cudaCheckError();
         DPRINTF("Threshold %.2f: Saved bits per element: %llu (Total %llu, %.3f%%)\n", threshold, *h_bits_saved,
