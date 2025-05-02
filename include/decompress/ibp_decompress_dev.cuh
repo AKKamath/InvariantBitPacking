@@ -167,6 +167,13 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
 
     if constexpr(ASYNC) {
         if (compressed_len - working_offset > 0) {
+            /*if(blockIdx.x == 0 && laneId == 0) {
+                printf("Async read; metadata offset %d, working offset %d, min %lu max %lu; vec %d comp %d\n",
+                    metadata_offset, working_offset,
+                    min(SHM_META / sizeof(T), (unsigned long)(compressed_len - working_offset)),
+                    min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
+                vec_size, compressed_len);
+            }*/
             async_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
                 min(SHM_META / sizeof(T), (unsigned long)(compressed_len - working_offset)),
                 min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
@@ -234,7 +241,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
                         min(SHM_META / sizeof(T), (unsigned long)
                             max((int32_t) (1 + lastbit_read - working_offset + bitmask_offset / sizeof(T)),
                                 compressed_len - working_offset)),
-                        min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
+                        min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
                         bitmask_offset, working_offset);
                 }
                 if(compressed_len - working_offset > 0) {
