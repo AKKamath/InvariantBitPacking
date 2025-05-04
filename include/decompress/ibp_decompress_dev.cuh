@@ -212,6 +212,7 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
             int32_t elem_offset = (i / (8 * sizeof(T))) % (SHM_META / sizeof(T));
             int32_t bit_offset =  i % (8 * sizeof(T));
             compressed_feat = (metadata[elem_offset] & (1ull << bit_offset));
+
             // Default 32 bits per thread, less if compressed
             cur_bitshift = sizeof(T) * 8;
             if(compressed_feat) {
@@ -232,10 +233,13 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
         int lastbit_read = __shfl_sync(FULL_MASK, (bitshift + cur_bitshift) / (sizeof(T) * 8), DWARP_SIZE - 1);
         if(lastbit_read >= working_offset - bitmask_offset / sizeof(T)) {
             if constexpr(ASYNC) {
+                /*if(laneId == 0 && test)
+                    DEB_PRINTF("4. Async offset %d, working_offset %d %d\n",
+                        async_offset, working_offset, lastbit_read >= async_offset - (int)(bitmask_offset / sizeof(T)));*/
                 if (async_offset > working_offset) {
                     working_offset = async_offset;
                 }
-                if (lastbit_read >= async_offset - bitmask_offset / sizeof(T)) {
+                if (lastbit_read >= async_offset - (int)(bitmask_offset / sizeof(T))) {
                     // Async data is not enough, read more data in non-async mode
                     working_offset = read_one_iter<SHM_META, SHM_WORK, ASYNC>(src, metadata, working_data,
                         min(SHM_META / sizeof(T), (unsigned long)
@@ -243,6 +247,9 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
                                 compressed_len - working_offset)),
                         min(SHM_WORK_BASE / sizeof(T), (unsigned long)vec_size - working_offset),
                         bitmask_offset, working_offset);
+                    /*if(laneId == 0 && test)
+                        DEB_PRINTF("5. Async offset %d, working_offset %d\n",
+                            async_offset, working_offset);*/
                 }
                 if(compressed_len - working_offset > 0) {
                     // Read next iter of working_data in async mode
@@ -263,9 +270,9 @@ __inline__ __device__ void decompress_fetch_cpu(T *dest, const T *src,
                     min(SHM_WORK / sizeof(T), (unsigned long)vec_size - working_offset),
                     bitmask_offset, working_offset);
             }
-            /*if(laneId == 0)
-                DEB_PRINTF("3. Metadata offset = %d, [Added] working offset = %d\n",
-                    metadata_offset, working_offset);*/
+            /*if(laneId == 0 && test)
+                DEB_PRINTF("3. Metadata offset = %d, [Added] working offset = %d; lastbit %d\n",
+                    metadata_offset, working_offset, lastbit_read);*/
         }
 
         // Now decompress
