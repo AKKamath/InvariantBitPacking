@@ -44,9 +44,10 @@ __global__ void decompress_fetch_cpu_kernel(T *output, T *input, int64_t num_vec
     }
     // Convert bytes to elements per shm_mask/shm_bitval array
     shmem_size /= 2;
+    shmem_size /= sizeof(T);
     T *shm_mask = (T*)&shmem[start_offset / sizeof(T)];
-    T *shm_bitval = (T*)&shmem[start_offset / sizeof(T) + shmem_size / sizeof(T)];
-    for(int i = threadIdx.x; i < shmem_size / sizeof(T); i += blockDim.x) {
+    T *shm_bitval = (T*)&shmem[start_offset / sizeof(T) + shmem_size];
+    for(int i = threadIdx.x; i < shmem_size; i += blockDim.x) {
         async_cp((int*)&shm_mask[i], (int*)&dev_mask[i], sizeof(T) / sizeof(int));
         async_cp((int*)&shm_bitval[i], (int*)&dev_bitval[i], sizeof(T) / sizeof(int));
     }
@@ -250,11 +251,12 @@ __global__ void decompress_fetch_cpu_tb_kernel(T *output, T *input, int64_t num_
     shmem_size -= offset * sizeof(T);
     // Convert bytes to elements per shm_mask/shm_bitval array
     shmem_size /= 2;
+    shmem_size /= sizeof(T);
     T *shm_mask = (T*)&shmem[offset];
-    T *shm_bitval = (T*)&shmem[offset + shmem_size / sizeof(T)];
+    T *shm_bitval = (T*)&shmem[offset + shmem_size];
     cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
     pipe.producer_acquire();
-    for(int i = threadIdx.x + threadIdx.y * blockDim.x; i < shmem_size / sizeof(T); i += blockDim.x * blockDim.y) {
+    for(int i = threadIdx.x + threadIdx.y * blockDim.x; i < shmem_size; i += blockDim.x * blockDim.y) {
         cuda::memcpy_async(&shm_mask[i], &dev_mask[i], sizeof(T), pipe);
         cuda::memcpy_async(&shm_bitval[i], &dev_bitval[i], sizeof(T), pipe);
         //shm_mask[i] = dev_mask[i];

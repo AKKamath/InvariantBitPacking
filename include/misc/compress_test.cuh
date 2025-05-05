@@ -13,11 +13,17 @@
 #define RUN_COMPRESSION(ALGO) \
     {\
         size_t max_out_bytes; \
+        nvcompStatus_t comp_res; \
         nvcompBatched##ALGO##CompressGetMaxOutputChunkSize(chunk_size, nvcompBatched##ALGO##DefaultOpts, &max_out_bytes); \
         cudaCheckError(); \
         printf("%s: Maxoutput: %zu\n", #ALGO, max_out_bytes); \
         size_t temp_bytes; \
-        nvcompBatched##ALGO##CompressGetTempSize(batch_size, chunk_size, nvcompBatched##ALGO##DefaultOpts, &temp_bytes); \
+        comp_res = nvcompBatched##ALGO##CompressGetTempSize(batch_size, chunk_size, nvcompBatched##ALGO##DefaultOpts, &temp_bytes); \
+        if (comp_res != nvcompSuccess) \
+        { \
+            std::cerr << "Failed GetTempSize! Error " << comp_res << std::endl; \
+            assert(comp_res == nvcompSuccess); \
+        } \
         cudaCheckError(); \
         void* device_temp_ptr;\
         cudaMalloc(&device_temp_ptr, temp_bytes); \
@@ -27,10 +33,10 @@
         cudaCheckError(); \
         cudaMemcpyAsync( \
             device_compressed_ptrs, host_compressed_ptrs,  \
-            sizeof(size_t) * batch_size,cudaMemcpyHostToDevice, stream); \
+            sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream); \
         cudaMemset(device_compressed_bytes, 0, sizeof(size_t) * batch_size); \
         cudaCheckError(); \
-        nvcompStatus_t comp_res = nvcompBatched##ALGO##CompressAsync( \
+        comp_res = nvcompBatched##ALGO##CompressAsync( \
             device_uncompressed_ptrs,\
             device_uncompressed_bytes,\
             chunk_size, \
@@ -45,7 +51,7 @@
         size_t total_compressed = 0; \
         if (comp_res != nvcompSuccess) \
         { \
-            std::cerr << "Failed compression!" << std::endl; \
+            std::cerr << "Failed compression! Error " << comp_res << std::endl; \
             assert(comp_res == nvcompSuccess); \
         } else { \
             cudaMemcpy(host_compressed_bytes, device_compressed_bytes, sizeof(size_t) * batch_size, cudaMemcpyDeviceToHost); \
@@ -91,7 +97,7 @@
         auto decomp_end = TIME_NOW; \
         if (decomp_res != nvcompSuccess) \
         { \
-            std::cerr << "Failed compression!" << std::endl; \
+            std::cerr << "Failed decompression!" << std::endl; \
             assert(decomp_res == nvcompSuccess); \
         } \
         printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", #ALGO, \
