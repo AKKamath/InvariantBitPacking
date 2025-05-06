@@ -80,7 +80,7 @@ ext_modules.append(
         include_dirs=[Path(this_dir) / i for i in include_dirs + test_includes],
         libraries=test_libs,
         library_dirs=[str(Path(this_dir) / i) for i in test_lib_dirs],
-        depends=test_src + include_files,
+        depends=test_src + include_files + ["include/misc/compress_test.cuh"],
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
             "nvcc": nvcc_flags + cc_flag,

@@ -36,11 +36,11 @@ if benchmark == "dlrm":
 elif benchmark == "kvcache":
     KVCACHE_FOLDER = "./kvcache/"
     folders = os.listdir(KVCACHE_FOLDER)
-    folder = folders[0]
     index = 0
     if len(sys.argv) > 2:
         index = int(sys.argv[2])
-    print(folders, folders[index])
+    folder = folders[index]
+    print(folder)
     files = os.listdir(KVCACHE_FOLDER + folder)
     features = {}
     for file in files:
@@ -53,6 +53,13 @@ elif benchmark == "kvcache":
                 features[layer] = tensor
             else:
                 features[layer] = torch.cat((features[layer], tensor), dim=0)
+    '''
+    for layer in features.keys():
+        feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int64)
+        non_zero_columns = torch.count_nonzero(torch.count_nonzero(feature, dim=1))
+        print(layer, non_zero_columns, non_zero_columns.shape)
+        #features[layer] = features[layer][:, non_zero_columns]
+    '''
     for layer in features.keys():
         print(layer)
         feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int64).pin_memory()
@@ -67,7 +74,7 @@ elif benchmark == "kvcache":
 else:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")
     import load_graph as ld
-    g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", "reddit", False)
+    g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", benchmark, False)
     print(features.shape, features.dtype)
 
     ibp_cuda_test.test_compress(features)

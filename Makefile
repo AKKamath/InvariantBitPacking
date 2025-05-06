@@ -49,3 +49,24 @@ ${DLRM}/asteroid.f32:
 kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
 	python tests/kmeans_asteroid.py > ${OUTPUT}/kmeans.out
 	python scripts/plot_kmeans.py ${OUTPUT}/kmeans.out ${OUTPUT}/kmeans
+
+.PHONY: kvcache
+
+# PLOTTED EXPERIMENTS
+kvcache:
+	python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kvcache_wiki.log
+	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kvcache_mmlu.log
+
+dlrm:
+	python tests/nvcomp_comparison.py dlrm > ${OUTPUT}/dlrm.log
+
+gnn:
+	for i in pubmed citeseer cora reddit products mag paper100m; do \
+		python tests/nvcomp_comparison.py $${i} > ${OUTPUT}/$${i}.log; \
+	done
+
+nvcomp_comparison:
+	$(MAKE) kvcache
+	$(MAKE) dlrm
+	$(MAKE) gnn
+	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag paper100m dlrm kvcache_wiki" > ${OUTPUT}/nvcomp_comparison.log

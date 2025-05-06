@@ -376,6 +376,19 @@ void test_compress(const at::Tensor &dataset)
     cudaCheckError();
 
     cudaDeviceSynchronize();
+    cudaFree(device_input_data);
+    cudaFree(device_output_data);
+    cudaFreeHost(host_uncompressed_bytes);
+    cudaFreeHost(host_uncompressed_ptrs);
+    cudaFree(device_uncompressed_bytes);
+    cudaFree(device_uncompressed_ptrs);
+    cudaFreeHost(host_compressed_ptrs);
+    cudaFreeHost(compressed_buffer);
+    cudaFree(device_compressed_bytes);
+    cudaFreeHost(host_compressed_bytes);
+    cudaFreeHost(host_output_data);
+    cudaFree(comp_bitmask);
+    cudaFree(d_comp_size);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
