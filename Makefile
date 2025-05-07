@@ -7,16 +7,12 @@ NCU=$(which ncu)
 ${OUTPUT}:
 	mkdir -p ${OUTPUT}
 
-copy_test: ${BUILD}/copy_test.exe ${OUTPUT}
-	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
-	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
-
 copy_test2: ${BUILD}/copy_test2.exe ${OUTPUT}
 	./${BUILD}/copy_test2.exe > ${OUTPUT}/output.txt
 	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
 
 ${BUILD}/%.exe: ${TESTS}/%.cu
-	nvcc -o $@ $< -I ./include -arch=sm_70 -gencode arch=compute_80,code=sm_80  -gencode arch=compute_90,code=sm_90 -Xcompiler -fopenmp
+	nvcc -o $@ $< -I ./include -arch=sm_70 -gencode arch=compute_80,code=sm_80 -Xcompiler -fopenmp -std=c++17
 
 decompress_pcie:
 	${NCU} --kernel-name "decompress_fetch_cpu_kernel" --metrics pcie__read_bytes.sum.per_second python tests/decompression_thput.py 1
@@ -29,13 +25,13 @@ sens_sweep: ${OUTPUT}
 	python tests/sens_sweep.py "pubmed citeseer cora reddit products" > ${OUTPUT}/sens_sweep.out
 	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 
-dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
+#dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
 	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
 	${DLRM}/feature_14_part0.npy ${DLRM}/feature_15_part0.npy ${DLRM}/feature_16_part0.npy ${DLRM}/feature_17_part0.npy ${DLRM}/feature_18_part0.npy \
 	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
 	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
-	python tests/compression_dlrm.py
+#	python tests/compression_dlrm.py
 
 ${DLRM}/feature_%_part0.npy:
 	mkdir -p ${DLRM}
@@ -50,14 +46,19 @@ kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
 	python tests/kmeans_asteroid.py > ${OUTPUT}/kmeans.out
 	python scripts/plot_kmeans.py ${OUTPUT}/kmeans.out ${OUTPUT}/kmeans
 
-.PHONY: kvcache
+.PHONY: kvcache dlrm gnn nvcomp_comparison
 
 # PLOTTED EXPERIMENTS
 kvcache:
 	python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kvcache_wiki.log
 	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kvcache_mmlu.log
 
-dlrm:
+dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
+	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
+	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
+	${DLRM}/feature_14_part0.npy ${DLRM}/feature_15_part0.npy ${DLRM}/feature_16_part0.npy ${DLRM}/feature_17_part0.npy ${DLRM}/feature_18_part0.npy \
+	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
+	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
 	python tests/nvcomp_comparison.py dlrm > ${OUTPUT}/dlrm.log
 
 gnn:
@@ -65,8 +66,15 @@ gnn:
 		python tests/nvcomp_comparison.py $${i} > ${OUTPUT}/$${i}.log; \
 	done
 
-nvcomp_comparison:
+nvcomp_comparison: # Tables 1, 2
 	$(MAKE) kvcache
 	$(MAKE) dlrm
 	$(MAKE) gnn
 	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag paper100m dlrm kvcache_wiki" > ${OUTPUT}/nvcomp_comparison.log
+
+copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 6
+	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
+	python scripts/plot.py ${OUTPUT}/output.txt ${OUTPUT}/output
+
+decomp_thput: # Figure 8
+	python tests/decompression_thput2.py

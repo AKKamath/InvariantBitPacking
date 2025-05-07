@@ -63,7 +63,7 @@ def compress_decompress(tensor, mask, bitval, index_arr, impl=None):
 
     # Untimed warmup
     decomp_tensor = ibp.decompress_fetch(copy_tensor, mask, bitval, bitmask,
-        torch.device('cuda'), complen, index_arr, 
+        torch.device('cuda'), complen, index_arr,
         None, None, impl)
     torch.cuda.synchronize()
 
@@ -71,7 +71,7 @@ def compress_decompress(tensor, mask, bitval, index_arr, impl=None):
     start = time.time_ns()
     for i in range(ITERS):
         decomp_tensor = ibp.decompress_fetch(copy_tensor, mask, bitval, bitmask,
-            torch.device('cuda'), complen, index_arr, 
+            torch.device('cuda'), complen, index_arr,
             None, None, impl)
     torch.cuda.synchronize()
     end = time.time_ns()
@@ -106,7 +106,7 @@ for size in SIZES:
     runtime[size][-1] = transfer(tensor)
     for rate in TARGET:
         mask, bitval = make_mask_and_bitval(tensor, rate)
-        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 0)
+        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 5)
         tensor2 = torch.zeros([NUM_VECS, int(complen.item())], dtype=torch.int32).pin_memory()
         base_time = transfer(tensor2)
         base_time = transfer2(tensor2, index_arr_orig)
