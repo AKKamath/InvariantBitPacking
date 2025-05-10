@@ -49,11 +49,11 @@ kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
 .PHONY: kvcache dlrm gnn nvcomp_comparison
 
 # PLOTTED EXPERIMENTS
-kvcache:
-	python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kvcache_wiki.log
-	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kvcache_mmlu.log
+nvcomp_kvcache:
+	python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kv_wiki_plaintiff.log
+	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kv_wiki_inst.log
 
-dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
+nvcomp_dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
 	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
 	${DLRM}/feature_14_part0.npy ${DLRM}/feature_15_part0.npy ${DLRM}/feature_16_part0.npy ${DLRM}/feature_17_part0.npy ${DLRM}/feature_18_part0.npy \
@@ -61,16 +61,16 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
 	python tests/nvcomp_comparison.py dlrm > ${OUTPUT}/dlrm.log
 
-gnn:
+nvcomp_gnn:
 	for i in pubmed citeseer cora reddit products mag paper100m; do \
 		python tests/nvcomp_comparison.py $${i} > ${OUTPUT}/$${i}.log; \
 	done
 
 nvcomp_comparison: # Tables 1, 2
-	$(MAKE) kvcache
-	$(MAKE) dlrm
-	$(MAKE) gnn
-	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag paper100m dlrm kvcache_wiki" > ${OUTPUT}/nvcomp_comparison.log
+	$(MAKE) nvcomp_kvcache
+	$(MAKE) nvcomp_dlrm
+	$(MAKE) nvcomp_gnn
+	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag paper100m dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
 
 copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 6
 	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
@@ -78,3 +78,17 @@ copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 6
 
 decomp_thput: # Figure 8
 	python tests/decompression_thput2.py
+
+# Figure 10
+dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
+	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
+	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
+	${DLRM}/feature_14_part0.npy ${DLRM}/feature_15_part0.npy ${DLRM}/feature_16_part0.npy ${DLRM}/feature_17_part0.npy ${DLRM}/feature_18_part0.npy \
+	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
+	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
+	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
+
+# Figure 11
+llm_layer:
+	$(MAKE) nvcomp_kvcache
+	python scripts/extract_layer_comp.py ${OUTPUT} "kv_wiki_plaintiff kv_wiki_inst"
