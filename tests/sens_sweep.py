@@ -2,6 +2,7 @@ import torch
 import ibp as ibp
 import sys
 import os
+import numpy as np
 import re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")
 import load_graph as ld
@@ -20,12 +21,14 @@ def test_type(dataset, perc):
     mask, bitval = ibp.preprocess(dataset[:int(dataset.shape[0] * perc)])
     sizes = ibp.get_compress_size(dataset, mask, bitval)
     torch.cuda.synchronize()
-    return 1 - (torch.sum(sizes) / (dataset.element_size() * dataset.nelement()))
+    return (dataset.element_size() * dataset.nelement()) / torch.sum(sizes)
 
-sample_sizes = [0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 1]
+sample_sizes = [0.05, 0.1, 0.25, 0.5, 0.75, 1]#[0.125, 0.25, 0.5, 1]
 datasets = sys.argv[1].split()
 comp_size = {}
 for dataset in datasets:
+    print(dataset, flush=True)
+    comp_size[dataset] = {}
     if dataset == "kvcache":
         folders = os.listdir(KVCACHE_FOLDER)
         index = 0
@@ -46,30 +49,58 @@ for dataset in datasets:
                 else:
                     features_read[layer] = torch.cat((features_read[layer], tensor), dim=0)
         features = None
-        for layer in features_read.keys():
+        layers = sorted(features_read.keys())
+        for layer in layers:
             print(layer)
             feature = features_read[layer].view((features_read[layer].shape[0], features_read[layer].shape[1] * features_read[layer].shape[2])).view(torch.int64)
-            if features is None:
-                features = feature
-            else:
-                features = torch.cat((features, feature), dim=1)
+            #if features is None:
+            #    features = feature
+            #else:
+            #    features = torch.cat((features, feature), dim=1)
+            print(feature.shape, feature.dtype)
+            feature = feature.pin_memory()
+            for sample in sample_sizes:
+                value = test_type(feature, sample)
+                comp_size[dataset][sample] = comp_size[dataset].get(sample, []) + [value]
+                print(sample, value)
+    elif dataset == "dlrm":
+        TABLES = 26
+        DLRM_FOLDER = "./dlrm_feats"
+        if len(sys.argv) > 2:
+            DLRM_FOLDER = sys.argv[2]
+
+        files = [DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy' for f in range(TABLES) if os.path.isfile(DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy')]
+        tensors = []
+        for file in files:
+            weights = np.load(file)
+            features = torch.from_numpy(weights).pin_memory()
+            if features.shape[0] < 100000:
+                continue
+            features = features.view(torch.int64)
+            print(file)
             print(features.shape, features.dtype)
-        features = features.pin_memory()
+            for sample in sample_sizes:
+                value = test_type(features, sample)
+                comp_size[dataset][sample] = comp_size[dataset].get(sample, []) + [value]
+                print(sample, value)
+
     else:
         g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", dataset)
-        print(dataset)
-    comp_size[dataset] = {}
-    for sample in sample_sizes:
-        comp_size[dataset][sample] = test_type(features, sample)
-
+        for sample in sample_sizes:
+            comp_size[dataset][sample] = test_type(features, sample)
 
 print(f"Dataset", end="\t")
 for sample in sample_sizes:
     print(f"{sample * 100}%", end="\t")
 print()
 
-for dataset in datasets:
+for dataset in comp_size:
     print(dataset, end="\t")
     for sample in sample_sizes:
-        print(f"{1 / (1 - comp_size[dataset][sample]):.2f}x", end="\t")
+        #print(comp_size[dataset][sample])
+        if isinstance(comp_size[dataset][sample], list):
+            avg = sum(comp_size[dataset][sample]) / len(comp_size[dataset][sample])
+        else:
+            avg = comp_size[dataset][sample]
+        print(f"{avg:.2f}x", end="\t")
     print()

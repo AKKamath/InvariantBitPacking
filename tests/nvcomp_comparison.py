@@ -4,9 +4,16 @@ import re
 import torch
 import numpy as np
 import ibp_cuda_test
+import ibp
 
 DLRM_FOLDER = "./dlrm_feats"
 KVCACHE_FOLDER = "./kvcache/"
+
+def test_type(dataset):
+    mask, bitval = ibp.preprocess(dataset)
+    sizes = ibp.get_compress_size(dataset, mask, bitval)
+    torch.cuda.synchronize()
+    return (dataset.element_size() * dataset.nelement()) / torch.sum(sizes)
 
 if len(sys.argv) < 2:
     print("Usage: python nvcomp_comparison.py <benchmark> [<folder>]")
@@ -64,7 +71,7 @@ elif benchmark == "kvcache":
     layers = sorted(features.keys())
     for layer in layers:
         #print(features[layer], flush=True)
-        feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int64).pin_memory()
+        feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int64)
         #print(feature)
         print("Layer", layer, flush=True)
         print(feature.shape, feature.dtype, flush=True)
@@ -75,9 +82,10 @@ elif benchmark == "kvcache":
                 #print(split_feat[0], split_feat.shape, split_feat.dtype, flush=True)
                 #for f in split_feat[0]:
                 #    print(f, flush=True)
+                split_feat = split_feat.contiguous().pin_memory()
                 ibp_cuda_test.test_compress(split_feat)
         else:
-            ibp_cuda_test.test_compress(feature)
+            ibp_cuda_test.test_compress(feature.pin_memory())
 
 else:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")

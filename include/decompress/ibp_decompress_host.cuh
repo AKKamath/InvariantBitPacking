@@ -20,6 +20,9 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
         else
             impl = 1; // TB-parallel*/
         impl = 5;
+        // If the compression is less than 20% and the vector is very, very large, then TB-parallel is superior
+        if((float)vec_size / (float)compressed_len < 1.2 && vec_size >= 2 * threads)
+            impl = 1;
     }
 
     int NBLOCKS = blks;

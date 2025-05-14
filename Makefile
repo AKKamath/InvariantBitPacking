@@ -21,10 +21,6 @@ sens_thresh: ${OUTPUT}
 	python tests/sens_threshold.py > ${OUTPUT}/sens_thresh.out
 	python scripts/get_threshold.py ${OUTPUT}/sens_thresh.out "1 2 4 8" >> ${OUTPUT}/sens_thresh.out
 
-sens_sweep: ${OUTPUT}
-	python tests/sens_sweep.py "pubmed citeseer cora reddit products" > ${OUTPUT}/sens_sweep.out
-	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
-
 #dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
 	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
@@ -92,3 +88,12 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 llm_layer:
 	$(MAKE) nvcomp_kvcache
 	python scripts/extract_layer_comp.py ${OUTPUT} "kv_wiki_plaintiff kv_wiki_inst"
+
+sens_sweep: ${OUTPUT}
+	python tests/sens_sweep.py "pubmed citeseer cora reddit products" > ${OUTPUT}/sens_sweep.out
+	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
+	python tests/sens_sweep.py "dlrm" > ${OUTPUT}/sens_sweep_dlrm.out
+	python tests/sens_sweep.py kvcache 0 > ${OUTPUT}/sens_sweep_kvcache.out
+
+invariance: # Table 3
+	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag" > ${OUTPUT}/invariance.out

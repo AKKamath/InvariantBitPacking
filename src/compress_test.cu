@@ -24,8 +24,8 @@ void test_compress(const at::Tensor &dataset)
 {
     TORCH_CHECK(dataset.device().type() == c10::kCUDA || dataset.is_pinned(),
         "Input tensor must accessible by CUDA device (GPU or pinned memory)");
-    TORCH_CHECK(dataset.dim() == 2,
-        "Input tensor must be 2D [num_vecs x vec_size]");
+    TORCH_CHECK(dataset.dim() == 2, "Input tensor must be 2D [num_vecs x vec_size]");
+    TORCH_CHECK(dataset.is_contiguous(), "Input tensor must be contiguous");
     size_t data_size = torch::elementSize(torch::typeMetaToScalarType(dataset.dtype()));
     TORCH_CHECK(data_size == 4 || data_size == 8, "Input tensor must be 4, 8-byte datatype");
     int64_t total_nodes = dataset.size(0);
@@ -347,6 +347,34 @@ void test_compress(const at::Tensor &dataset)
     cudaMemcpy(host_output_data, device_output_data, in_bytes, cudaMemcpyDeviceToHost);
 
     printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "Us-Async",
+        (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
+        (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
+        (float)comp_size / TIME_DIFF(decomp_start, decomp_end));
+    cudaCheckError();
+    for(int i = 0; i < in_bytes / sizeof(float); ++i) {
+        if(((float*)cpu_features)[i] != ((float*)host_output_data)[i]) {
+            printf("Mismatch at %d: %x vs %x\n", i, ((int32_t*)cpu_features)[i], ((int32_t*)host_output_data)[i]);
+            break;
+        }
+    }
+
+    cudaMemset(device_output_data, 0, in_bytes);
+    decomp_start = TIME_NOW;
+    if (data_size == 4) {
+        ibp::decompress_fetch<int32_t>((int32_t*)device_output_data, (int32_t*)compressed_buffer,
+            nodes_per_gpu, (int64_t)feature_len, (int32_t*)comp_mask, (int32_t*)comp_bitval, comp_bitmask,
+            (int)(((float)comp_size / (float)in_bytes) * feature_len), stream, sm_count, 512, -1);
+    } else {
+        ibp::decompress_fetch<ull>((ull*)device_output_data, (ull*)compressed_buffer,
+            nodes_per_gpu, (int64_t)feature_len, (ull*)comp_mask, (ull*)comp_bitval, comp_bitmask,
+            (int)(((float)comp_size / (float)in_bytes) * feature_len), stream, sm_count, 512, -1);
+    }
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    decomp_end = TIME_NOW;
+    cudaMemcpy(host_output_data, device_output_data, in_bytes, cudaMemcpyDeviceToHost);
+
+    printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "Us-Def",
         (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
         (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
         (float)comp_size / TIME_DIFF(decomp_start, decomp_end));

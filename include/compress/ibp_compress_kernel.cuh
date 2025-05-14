@@ -7,9 +7,9 @@
 namespace ibp {
 
 template <typename T, typename IndexT = void, typename CtrT = void, typename SizeT = void>
-__global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs, 
+__global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
     int64_t vec_size, T *mask, T *bitval, T *workspace,
-    int32_t *bitmask = nullptr, IndexT *index_array = nullptr, 
+    int32_t *bitmask = nullptr, IndexT *index_array = nullptr,
     CtrT *comp_ctr = nullptr, SizeT *compress_size = nullptr)
 {
     int64_t vec_bytes = vec_size * sizeof(T);
@@ -25,10 +25,10 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
                 index = index_array[i];
         __syncwarp();
         // Check compressed size first
-        int64_t compressed = check_compress_size_warp(&input[index * vec_size], 
+        int64_t compressed = check_compress_size_warp(&input[index * vec_size],
             vec_size, mask, bitval);
         __syncwarp();
-        if(compressed != vec_bytes) {
+        if(compressed + 32 <= vec_bytes) {
             // Compressed write to myworkspace
             compress_and_write(myworkspace, &input[index * vec_size], vec_size,
                 mask, bitval);
@@ -45,7 +45,7 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
                         atomicAdd(comp_ctr, (CtrT)1);
             }
         } else {
-            memcpy_warp(&output[i * vec_size], 
+            memcpy_warp(&output[i * vec_size],
                 &input[index * vec_size], vec_size);
         }
         if constexpr(!std::is_same<SizeT, void>::value)
@@ -56,7 +56,7 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
 }
 
 template <typename T, typename IndexT = void, typename CtrT = void, typename SizeT = void>
-__global__ void compress_condensed_kernel(T *output, T *input, int64_t num_vecs, 
+__global__ void compress_condensed_kernel(T *output, T *input, int64_t num_vecs,
     int64_t vec_size, T *mask, T *bitval, int64_t *comp_offsets,
     int32_t *bitmask = nullptr, IndexT *index_array = nullptr)
 {
@@ -82,12 +82,12 @@ __global__ void compress_condensed_kernel(T *output, T *input, int64_t num_vecs,
         __syncwarp();
         if(insert_size != vec_bytes) {
             // Compressed write
-            compress_and_write((T*)((char*)output + start_offset), 
+            compress_and_write((T*)((char*)output + start_offset),
                 &input[index * vec_size], vec_size, mask, bitval);
             if(laneId == 0 && bitmask != nullptr)
                 atomicOr(&bitmask[i / 32], 1 << (i % 32));
         } else {
-            memcpy_warp((T*)((char*)output + start_offset), 
+            memcpy_warp((T*)((char*)output + start_offset),
                 &input[index * vec_size], vec_size);
         }
     }
