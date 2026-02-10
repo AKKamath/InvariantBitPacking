@@ -16,7 +16,7 @@
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
-   if (code != cudaSuccess) 
+   if (code != cudaSuccess)
    {
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
@@ -67,7 +67,7 @@ void reset()
     cudaMemset(cache, 0, cache_size);
 }
 
-void check(char *data, int64_t *indices, size_t element_size, size_t array_size, int *flag) 
+void check(char *data, int64_t *indices, size_t element_size, size_t array_size, int *flag)
 {
     cudaMemset(flag, 0, sizeof(int));
     check_kernel <<< 64, 512 >>> (cache, data, indices, element_size, array_size, cache_size, flag);
@@ -227,7 +227,7 @@ __global__ void transfer_gpu_kernel_align_plus(char* cache, const char* data, co
                 *cache_arr = data_arr;
             __syncwarp();
         }
-        
+
         for(int k = thread * 4 + (offset - 128); k < offset; k += 32 * 4) {
             int *cache_arr = (int *)&cache[(dim * j) % (cache_size - dim) + k];
             int data_arr = *(int *)&data[(dim * loc) + k];
@@ -244,9 +244,9 @@ void transfer_gpu_align_plus(char *data, int64_t *indices, size_t element_size, 
     gpuErrchk(cudaDeviceSynchronize());
 }
 
-__global__ void transfer_kernel(char* cache, const char* data, 
+__global__ void transfer_kernel(char* cache, const char* data,
         const int64_t* indices, int64_t dim, size_t len, int cache_size) {
-    
+
     int threadId = threadIdx.x + blockIdx.x * blockDim.x;
     int warpId = threadId / DWARP_SIZE;
     int numWarps = (blockDim.x * gridDim.x) / DWARP_SIZE;
@@ -299,8 +299,8 @@ void transfer_dgl(char *data, int64_t *indices, int64_t element_size, int64_t ar
       threads /= 2;
       blks *= 2;
     }
-    IndexSelectMultiKernelAligned<uint64_t, int64_t>  <<< blks, threads >>> 
-        ((uint64_t*)data, num_feat, indices, array_size, 
+    IndexSelectMultiKernelAligned<uint64_t, int64_t>  <<< blks, threads >>>
+        ((uint64_t*)data, num_feat, indices, array_size,
         GB / sizeof(int64_t), (uint64_t*)cache, cache_size / sizeof(uint64_t));
     gpuErrchk(cudaDeviceSynchronize());
 }
@@ -314,7 +314,7 @@ __global__ void reset_data(char *array, size_t size) {
         array[i] = i % 256;
 }
 
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
     int device = 0;
     if(argc > 1)
@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
 
     auto START = TIME_NOW, END = TIME_NOW;
     float TIME = TIME_DIFF(START, END);
-    
+
     init_cache(CACHE_SIZE, array_size);
     fprintf(stderr, "Init cache\n");
 
@@ -356,14 +356,14 @@ int main(int argc, char *argv[])
         // Sort to improve accesses. Usually done in critical path, but all need it
         std::sort(index_buffer, index_buffer + array_size);
         gpuErrchk(cudaMemcpy(gpu_indices, index_buffer, array_size * sizeof(int64_t), cudaMemcpyHostToDevice));
-        
-        RUN_TEST_CPU(transfer_cpu, "CPU copy");
-        RUN_TEST_CPU(transfer_cpu2, "CPU index");
-        RUN_TEST(transfer_gpu_int, "GPU copy");
-        RUN_TEST(transfer_gpu_align, "Aligned GPU copy");
+
+        RUN_TEST_CPU(transfer_cpu, "CPU (Fine-grained)");
+        RUN_TEST_CPU(transfer_cpu2, "CPU (Bulk)");
+        RUN_TEST(transfer_gpu_int, "GPU");
+        RUN_TEST(transfer_gpu_align, "GPU (Aligned)");
         //RUN_TEST(transfer_gpu_int64, "Bigint");
         //RUN_TEST(transfer_gpu_align2, "AlignedDeux");
-        RUN_TEST(transfer_gpu_align_plus, "Aligned + Padded");
+        //RUN_TEST(transfer_gpu_align_plus, "Aligned + Padded");
         //RUN_TEST(transfer_gpu_align_plus2, "AlignedPaddedAgain");
 
         /*START = TIME_NOW;
