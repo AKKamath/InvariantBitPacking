@@ -28,7 +28,7 @@ __global__ void compress_inplace_kernel(T *output, T *input, int64_t num_vecs,
         int64_t compressed = check_compress_size_warp(&input[index * vec_size],
             vec_size, mask, bitval);
         __syncwarp();
-        if(compressed + 32 <= vec_bytes) {
+        if(compressed < vec_bytes) {
             // Compressed write to myworkspace
             compress_and_write(myworkspace, &input[index * vec_size], vec_size,
                 mask, bitval);
