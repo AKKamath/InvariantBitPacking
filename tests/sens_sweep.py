@@ -23,7 +23,7 @@ def test_type(dataset, perc):
     torch.cuda.synchronize()
     return (dataset.element_size() * dataset.nelement()) / torch.sum(sizes)
 
-sample_sizes = [0.05, 0.1, 0.25, 0.5, 0.75, 1]#[0.125, 0.25, 0.5, 1]
+sample_sizes = [0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1]#[0.125, 0.25, 0.5, 1]
 datasets = sys.argv[1].split()
 comp_size = {}
 for dataset in datasets:

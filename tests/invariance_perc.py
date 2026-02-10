@@ -4,8 +4,12 @@ import numpy as np
 import math
 import sys
 import os
+import re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")
 import load_graph as ld
+
+DLRM_FOLDER = "./dlrm_feats"
+KVCACHE_FOLDER = "./kvcache/"
 
 def pin_inplace(tensor):
     try:
@@ -77,12 +81,63 @@ comp_size = {}
 bitp_size = {}
 bpgp_size = {}
 for dataset in datasets:
-    g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", dataset)
+    if dataset == "kvcache":
+        folders = os.listdir(KVCACHE_FOLDER)
+        index = 0
+        if len(sys.argv) > 2:
+            index = int(sys.argv[2])
+        folder = folders[index]
+        print(folders, flush=True)
+        print(folder, flush=True)
+        files = os.listdir(KVCACHE_FOLDER + folder)
+        features = {}
+        for file in files:
+            match = re.search(r"cache_0_([0-9]+)_([0-9]+)_", file)
+            if match:
+                layer = int(match.group(1))
+                batch = int(match.group(2))
+                tensor = torch.load(KVCACHE_FOLDER + folder + "/" + file)
+                if layer not in features:
+                    features[layer] = tensor
+                else:
+                    features[layer] = torch.cat((features[layer], tensor), dim=0)
+        for ind, layer in enumerate(features.keys()):
+            '''
+            if ind == 0:
+                feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+            else:
+                feat = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+                feature = torch.cat((feat, feature))
+            '''
+            feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+            feature = feature.detach().clone().pin_memory()
+            comp_size[dataset + str(layer)] = ibp_ify(feature)
+            bitp_size[dataset + str(layer)] = bitpack(feature)
+            bpgp_size[dataset + str(layer)] = bitpack_group(feature)
+        continue
+    # Filtering only the files.
+    if dataset == 'dlrm':
+        TABLES = 26
+        files = os.listdir(DLRM_FOLDER)
+        files = [DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy' for f in range(TABLES) if os.path.isfile(DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy')]
+
+        # PREPROCESSING AND SETTING UP DATA STRUCTURES
+        for ind, file in enumerate(files):
+            weights = np.load(file)
+            tensor = torch.from_numpy(weights).pin_memory()
+            print(tensor.shape)
+            if ind == 0:
+                features = tensor
+            else:
+                features = torch.cat((tensor, features))
+        features = features.detach().clone().pin_memory()
+    else:
+        g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", dataset)
     print(dataset)
     comp_size[dataset] = ibp_ify(features)
     bitp_size[dataset] = bitpack(features)
     bpgp_size[dataset] = bitpack_group(features)
 
 print("Dataset\tIBP\tBitpack\tBP group")
-for dataset in datasets:
+for dataset in comp_size.keys():
     print(f"{dataset}\t{comp_size[dataset]:.2f}\t{bitp_size[dataset]:.2f}\t{bpgp_size[dataset]:.2f}")

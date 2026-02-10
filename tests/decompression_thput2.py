@@ -88,7 +88,7 @@ def compress_decompress(tensor, mask, bitval, index_arr, impl=None):
 # Turn on debug print messages
 #ibp.print_debug(True)
 
-TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95]
+TARGET = [0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975]
 SIZES = [256, 1024, 4 * 1024]
 NUM_VECS = 100000
 #SIZES = [256, 400, 512]
@@ -106,7 +106,7 @@ for size in SIZES:
     runtime[size][-1] = transfer(tensor)
     for rate in TARGET:
         mask, bitval = make_mask_and_bitval(tensor, rate)
-        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, 5)
+        rate, time_taken, complen = compress_decompress(tensor, mask, bitval, index_arr_orig, -1)
         tensor2 = torch.zeros([NUM_VECS, int(complen.item())], dtype=torch.int32).pin_memory()
         base_time = transfer(tensor2)
         base_time = transfer2(tensor2, index_arr_orig)
