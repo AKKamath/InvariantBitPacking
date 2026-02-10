@@ -91,9 +91,9 @@ llm_layer:
 
 sens_sweep: ${OUTPUT}
 	python tests/sens_sweep.py "pubmed citeseer cora reddit products" > ${OUTPUT}/sens_sweep.out
-	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 	python tests/sens_sweep.py "dlrm" > ${OUTPUT}/sens_sweep_dlrm.out
 	python tests/sens_sweep.py kvcache 0 > ${OUTPUT}/sens_sweep_kvcache.out
+	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 
 invariance: # Table 3
-	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag" > ${OUTPUT}/invariance.out
+	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag dlrm" > ${OUTPUT}/invariance.out
