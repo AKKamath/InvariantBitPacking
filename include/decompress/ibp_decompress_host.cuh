@@ -48,7 +48,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
             else
                 decomp_kernel = &decompress_fetch_cpu_kernel<true, SHM_META, SHM_WORK, true, T, IndexT>;
 
-            DPRINTF("Have enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n",
+            DPRINTF("Have enough shmem (alloc = %lu, maxshmem = %d, vec_size = %ld, required = %lu)\n",
                 shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META + SHM_ASYNC));
         } else {
             shmem_size = maxShmem; //256 / 32 * 96 * sizeof(int32_t);
@@ -56,7 +56,7 @@ void decompress_fetch(T *output, T *input, int64_t num_vecs, int64_t vec_size,
                 decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, false, T, IndexT>;
             else
                 decomp_kernel = &decompress_fetch_cpu_kernel<false, SHM_META, SHM_WORK, true, T, IndexT>;
-            DPRINTF("Not enough shmem (alloc = %d, maxshmem = %d, vec_size = %ld, required = %lu)\n",
+            DPRINTF("Not enough shmem (alloc = %lu, maxshmem = %d, vec_size = %ld, required = %lu)\n",
                 shmem_size, maxShmem, vec_size, 2 * vec_size * sizeof(T) + NTHREADS / DWARP_SIZE * (SHM_WORK + SHM_META));
         }
         // Need opt-in for large shmem allocations
