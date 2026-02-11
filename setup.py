@@ -33,6 +33,7 @@ include_dirs = [
     "include/preproc/",
     "include/misc/",
     "include/compress/",
+    os.path.join(os.environ["CONDA_PREFIX"], "include"),
 ]
 include_files = [
     "include/ibp_helpers.cuh",
