@@ -23,7 +23,7 @@ We provide a docker image for IBP with all its dependencies installed. To access
 docker build -t ibp-image-121 -f Dockerfile-121 .
 # Run the docker image
 docker run --gpus all -it \
-  -p 8181:8181 --rm --ipc=host --cap-add=SYS_ADMIN ibp-image-121
+  -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image-121
 ```
 
 ### Manual installation
@@ -51,26 +51,6 @@ pip install torchdata==0.7.0
 make download_gnn
 ```
 
-```
-# If conda not installed:
-make install_miniconda
-# Setup:
-make create_env
-conda activate ibp
-# If system does not have CUDA 11.7 installed, the below installs it in conda.
-make install_cuda
-conda env config vars set CUDA_HOME="${CONDA_PREFIX}"
-conda env config vars set CUDA_TOOLKIT_ROOT_DIR="${CONDA_PREFIX}"
-conda env config vars set CUDACXX="${CONDA_PREFIX}/bin/nvcc"
-conda env config vars set PATH=$CONDA_PREFIX/bin:$PATH
-conda env config vars set LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-# Otherwise if CUDA 11.7 is already installed, continue from here.
-make install_deps
-conda deactivate
-conda activate ibp
-make install
-```
-
 ## Running experiments
 Before running any experiment ensure you are in the ibp conda environment. This can be ensured by running the following command:
 ```
@@ -95,7 +75,7 @@ You can run ```cat {filename}``` to output the results to the terminal. This can
 Main experiments:
 * Tables 1, 2 - results/nvcomp_comparison.log
 * Figure 8 - results/gnn_perf.log
-* Figure 9 - results/dlrm_comp_merged.log
+* Figure 9 - results/dlrm_perf.log
 * Figure 10 - results/llm_latency.log
 
 Other experiments:
