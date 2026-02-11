@@ -3,4 +3,5 @@ dist/**
 *.egg-info/**
 *.out
 **.npy
+**.pt
 **.so
