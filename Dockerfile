@@ -28,6 +28,5 @@ RUN conda activate ibp
 ENV TORCH_CUDA_ARCH_LIST="8.0"
 ENV DGLBACKEND="pytorch"
 RUN conda activate ibp && make install NVCC=$(which nvcc) GCC=$(which gcc) GPP=$(which g++)
-RUN make download_dlrm
 RUN conda activate ibp && make download_gnn
 RUN echo "conda activate ibp" >> ~/.bashrc

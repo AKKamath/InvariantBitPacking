@@ -6,7 +6,7 @@ WORKDIR /workspace
 
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential git wget curl libcrypt-dev
+    build-essential git wget curl libcrypt-dev vim
 
 # Setup miniconda
 RUN mkdir -p ~/miniconda3
@@ -21,7 +21,7 @@ SHELL ["/bin/bash", "-i", "-c"]
 RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
 RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 RUN make clean_install
-RUN make create_env CUDA_VERSION=12.1 TORCH_VERSION=2.1.0
+RUN make create_env CUDAV=12.1 TORCH_VERSION=2.1.0
 #RUN pip install torchdata==0.7.0
 RUN conda activate ibp && make install_deps
 RUN conda deactivate
@@ -32,6 +32,5 @@ ENV DGL_HOME=/workspace/workloads/DGL-IBP
 RUN conda activate ibp && make install NVCC=$(which nvcc) GCC=$(which gcc) GPP=$(which g++)
 ENV DGLBACKEND="pytorch"
 RUN conda activate ibp && pip install torchdata==0.7.0
-RUN make download_dlrm
 RUN conda activate ibp && make download_gnn
 RUN echo "conda activate ibp" >> ~/.bashrc
