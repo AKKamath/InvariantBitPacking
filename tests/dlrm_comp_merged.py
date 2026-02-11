@@ -15,7 +15,7 @@ if len(sys.argv) > 1:
 
 files = os.listdir(DLRM_FOLDER)
 # Filtering only the files.
-files = [DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy' for f in range(TABLES) 
+files = [DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy' for f in range(TABLES)
          if os.path.isfile(DLRM_FOLDER+'/feature_' + str(f) + '_part0.npy')]
 BATCHES = [1024, 2048, 4096, 8192]
 # READ TABLES
@@ -207,7 +207,7 @@ for T_SIZE in T_SIZES:
             indices = indices.view(TABLES * BATCH)
             indices_cuda = indices.to("cuda")
             torch.cuda.synchronize()
-            
+
             # Simple data transfer
             '''
             start = time.time_ns()
@@ -219,7 +219,7 @@ for T_SIZE in T_SIZES:
             end = time.time_ns()
             tran_time += end - start
             '''
-            
+
             offsets_cuda = offsets.to("cuda:0")
             # Comp. Embedding bag time
             torch.cuda.synchronize()
@@ -267,7 +267,7 @@ for T_SIZE in T_SIZES:
                 print(torch.sum(torch.eq(tensor_tran2, return_val2_cuda)).item()/tensor_tran2.nelement())
                 #exit(1)
             '''
-            
+
 
         print(f"Batch: {BATCH}")
         #print(f"Transfer (index + copy) time: {tran_time / ITERS / 1e6:.3f} ms")
@@ -303,10 +303,11 @@ for T_SIZE in T_SIZES:
         sd = {i: d[i] for i in myKeys}
         print(sd)
 
-for T_SIZE in T_SIZES:
-    print(f"{T_SIZE}\tRuntime speedup\tTransfer speedup\tcomp_runtime\tbase_runtime\tcomp_transfer\tbase_transfer")
-    for BATCH in BATCHES:
+for BATCH in BATCHES:
+    print(f"{BATCH}\tRuntime speedup\tTransfer speedup\tcomp_runtime\tbase_runtime\tcomp_transfer\tbase_transfer")
+    for T_SIZE in T_SIZES:
         run_sp = base_runtime[T_SIZE][BATCH] / comp_runtime[T_SIZE][BATCH]
         transfer_sp = base_transfer[T_SIZE][BATCH] / comp_transfer[T_SIZE][BATCH]
-        print(f"{BATCH}\t{run_sp:.4f}\t{transfer_sp:.4f}\t{comp_runtime[T_SIZE][BATCH]:.4f}\t{base_runtime[T_SIZE][BATCH]:.4f}\t" +
+        print(f"{T_SIZE * 4}\t{run_sp:.4f}\t{transfer_sp:.4f}\t{comp_runtime[T_SIZE][BATCH]:.4f}\t{base_runtime[T_SIZE][BATCH]:.4f}\t" +
             f"{comp_transfer[T_SIZE][BATCH]:.4f}\t{base_transfer[T_SIZE][BATCH]:.4f}")
+    print()
