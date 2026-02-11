@@ -51,48 +51,7 @@ for dataset in datasets:
     extract_ratio(folder_path + '/' + dataset + '.log', folder_path)
     extract_thput(folder_path + '/' + dataset + '.log', folder_path)
 
-
-print("Ratios", end='\t')
-first_key = list(RATIOS.keys())[0]
-datasets = RATIOS[first_key].keys()
-for dataset in datasets:
-    print("{:s}".format(dataset), end='\t')
-print()
-
-for algo in RATIOS:
-    print("{:s}".format(algo), end='\t')
-    for dataset in datasets:
-        if(dataset in RATIOS[algo]):
-            if isinstance(RATIOS[algo][dataset], list):
-                print("{:.2f}".format(sum(RATIOS[algo][dataset]) / len(RATIOS[algo][dataset])), end='\t')
-            else:
-                print("{:.2f}".format(RATIOS[algo][dataset]), end='\t')
-
-        else:
-            print("NA", end='\t')
-    print()
-print()
-
-print("Thput", end='\t')
-#first_key = list(THPUTS.keys())[0]
-for dataset in datasets:
-    print("{:s}".format(dataset), end='\t')
-print()
-
-for algo in THPUTS:
-    print("{:s}".format(algo), end='\t')
-    for dataset in datasets:
-        if(dataset in THPUTS[algo]):
-            if isinstance(THPUTS[algo][dataset], list):
-                print("{:.2f}".format(sum(THPUTS[algo][dataset]) / len(THPUTS[algo][dataset]) / 1000), end='\t')
-            else:
-                print("{:.2f}".format(THPUTS[algo][dataset] / 1000), end='\t')
-        else:
-            print("NA", end='\t')
-    print()
-print()
-
-print("Norm. thput", end='\t')
+print("Avg speedup", end='\t')
 first_key = list(THPUTS.keys())[0]
 for dataset in datasets:
     print("{:s}".format(dataset), end='\t')
@@ -114,3 +73,46 @@ for algo in THPUTS:
         else:
             print("NA", end='\t')
     print()
+print()
+
+print("Space savings (%)", end='\t')
+first_key = list(RATIOS.keys())[0]
+datasets = RATIOS[first_key].keys()
+for dataset in datasets:
+    print("{:s}".format(dataset), end='\t')
+print()
+
+for algo in RATIOS:
+    print("{:s}".format(algo), end='\t')
+    for dataset in datasets:
+        if(dataset in RATIOS[algo]):
+            if isinstance(RATIOS[algo][dataset], list):
+                print("{:.2f}".format((1.0 - (1.0 / (sum(RATIOS[algo][dataset]) / len(RATIOS[algo][dataset])))) * 100.0), end='\t')
+            else:
+                print("{:.2f}".format((1.0 - (1.0 / RATIOS[algo][dataset])) * 100.0), end='\t')
+
+        else:
+            print("NA", end='\t')
+    print()
+print()
+
+'''
+print("Thput", end='\t')
+#first_key = list(THPUTS.keys())[0]
+for dataset in datasets:
+    print("{:s}".format(dataset), end='\t')
+print()
+
+for algo in THPUTS:
+    print("{:s}".format(algo), end='\t')
+    for dataset in datasets:
+        if(dataset in THPUTS[algo]):
+            if isinstance(THPUTS[algo][dataset], list):
+                print("{:.2f}".format(sum(THPUTS[algo][dataset]) / len(THPUTS[algo][dataset]) / 1000), end='\t')
+            else:
+                print("{:.2f}".format(THPUTS[algo][dataset] / 1000), end='\t')
+        else:
+            print("NA", end='\t')
+    print()
+print()
+'''
