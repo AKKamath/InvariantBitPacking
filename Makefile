@@ -82,8 +82,14 @@ install_colossalai:
 
 install_infinigen:
 	cd workloads/InfiniGen-IBP; \
+	conda create -n infinigen python=3.9; \
+	conda activate infinigen; \
 	pip install -r requirements.txt; \
-	cd speedup; sh install.sh
+	cd speedup; sh install.sh;
+	# (Re-)install IBP in the same environment
+	conda activate infinigen; \
+	$(MAKE) install_ibp; \
+	conda activate ibp;
 
 install: ${OUTPUT}
 	$(MAKE) install_nvcomp
@@ -219,7 +225,9 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
 llm:
-	cd workloads/InfiniGen-IBP; $(MAKE) run_expt > ${OUTPUT}/llm_latency.log;
+	conda activate infinigen; \
+	cd workloads/InfiniGen-IBP; $(MAKE) run_expt > ${OUTPUT}/llm_latency.log; \
+	conda activate ibp;
 
 # Figure 10
 llm_layer:
