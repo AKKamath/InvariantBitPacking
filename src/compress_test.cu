@@ -272,7 +272,7 @@ void test_compress(const at::Tensor &dataset)
             printf("Mismatch at %d: %x vs %x\n", i, ((int32_t*)cpu_features)[i], ((int32_t*)host_output_data)[i]);
             break;
         }
-    }*/
+    }
 
     cudaMemset(device_output_data, 0, in_bytes);
     decomp_start = TIME_NOW;
@@ -356,7 +356,7 @@ void test_compress(const at::Tensor &dataset)
             printf("Mismatch at %d: %x vs %x\n", i, ((int32_t*)cpu_features)[i], ((int32_t*)host_output_data)[i]);
             break;
         }
-    }
+    }*/
 
     cudaMemset(device_output_data, 0, in_bytes);
     decomp_start = TIME_NOW;
@@ -374,7 +374,7 @@ void test_compress(const at::Tensor &dataset)
     decomp_end = TIME_NOW;
     cudaMemcpy(host_output_data, device_output_data, in_bytes, cudaMemcpyDeviceToHost);
 
-    printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "Us-Def",
+    printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "IBP",
         (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
         (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
         (float)comp_size / TIME_DIFF(decomp_start, decomp_end));

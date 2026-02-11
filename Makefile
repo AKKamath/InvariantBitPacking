@@ -194,10 +194,19 @@ decomp_thput: # Figure 7
 	python tests/decompression_thput2.py > ${OUTPUT}/decomp_thput.out
 	tail -n 4 ${OUTPUT}/decomp_thput.out
 
+RUN_MPS = export CUDA_MPS_PIPE_DIRECTORY=./tmp; \
+	export CUDA_MPS_LOG_DIRECTORY=./tmp; \
+	nvidia-cuda-mps-control -d
+
+KILL_MPS =	echo quit | nvidia-cuda-mps-control
+
 # Figure 8
 gnn: ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features ${GNN_DATASET}/cora/features \
 	${GNN_DATASET}/reddit/features ${GNN_DATASET}/products/features ${GNN_DATASET}/mag/features
-	cd workloads/Legion-IBP; make run_expts;
+	${RUN_MPS}; \
+	cd workloads/Legion-IBP; make run_expts_singlegpu; \
+	${KILL_MPS};
+	cd workloads/Legion-IBP; make extract_expts_single > ${OUTPUT}/gnn_perf.log;
 
 # Figure 9
 dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
@@ -207,9 +216,10 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
 	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
 	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
+	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
 llm:
-	cd workloads/InfiniGen-IBP; $(MAKE) run_expt;
+	cd workloads/InfiniGen-IBP; $(MAKE) run_expt > ${OUTPUT}/llm_latency.log;
 
 # Figure 10
 llm_layer:
