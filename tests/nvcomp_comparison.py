@@ -88,9 +88,9 @@ elif benchmark == "kvcache":
             ibp_cuda_test.test_compress(feature.pin_memory())
 
 else:
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../workloads/Legion-IBP/training_backend/")
     import load_graph as ld
-    g, features, labels, training_ids, validation_ids, testing_ids = ld.load("../../../dataset/", benchmark, False)
+    g, features, labels, training_ids, validation_ids, testing_ids = ld.load("workloads/Legion-IBP/dataset/", benchmark, False)
     print(features.shape, features.dtype)
 
     ibp_cuda_test.test_compress(features)
