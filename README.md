@@ -20,10 +20,10 @@ make download_llm # 8GB download
 We provide a docker image for IBP with all its dependencies installed. To access the docker image, you need to have [Docker](https://docs.docker.com/engine/install/) and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed on your system. You can then launch the docker container and navigate to the folder containing the artifact, as follows:
 ```
 # Build the local docker image [~1 hour]
-docker build -t ibp-image-121 -f Dockerfile-121 .
+docker build -t ibp-image -f Dockerfile .
 # Run the docker image
 docker run --gpus all -it \
-  -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image-121
+  -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image
 ```
 
 ### Manual installation
@@ -33,16 +33,16 @@ The Docker setup is recommended for ease of use. Manual installation can cause p
 # If conda not installed:
 make install_miniconda
 # Setup:
-make create_env CUDAV=12.1 TORCH_VERSION=2.1.0
+make create_env
 conda activate ibp
-# If system does not have CUDA 12.1 installed, the below installs it in conda.
-make install_cuda12
+# If system does not have CUDA 11.7 installed, the below installs it in conda.
+make install_cuda
 conda env config vars set CUDA_HOME="${CONDA_PREFIX}"
 conda env config vars set CUDA_TOOLKIT_ROOT_DIR="${CONDA_PREFIX}"
 conda env config vars set CUDACXX="${CONDA_PREFIX}/bin/nvcc"
 conda env config vars set PATH="$CONDA_PREFIX/bin:$PATH"
 conda env config vars set LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-# Otherwise if CUDA 12.1 is already installed, continue from here.
+# Otherwise if CUDA 11.7 is already installed, continue from here.
 make install_deps
 conda deactivate
 conda activate ibp

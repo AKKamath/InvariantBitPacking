@@ -6,7 +6,7 @@ WORKDIR /workspace
 
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential git wget curl libcrypt-dev
+    build-essential git wget curl libcrypt-dev vim
 
 # Setup miniconda
 RUN mkdir -p ~/miniconda3
@@ -26,7 +26,9 @@ RUN conda activate ibp && make install_deps
 RUN conda deactivate
 RUN conda activate ibp
 ENV TORCH_CUDA_ARCH_LIST="8.0"
-ENV DGLBACKEND="pytorch"
+ENV DGL_HOME=/workspace/workloads/DGL-IBP
+ENV LD_LIBRARY_PATH=/workspace/ndzip/build/:$LD_LIBRARY_PATH
 RUN conda activate ibp && make install NVCC=$(which nvcc) GCC=$(which gcc) GPP=$(which g++)
+ENV DGLBACKEND="pytorch"
 RUN conda activate ibp && make download_gnn
 RUN echo "conda activate ibp" >> ~/.bashrc
