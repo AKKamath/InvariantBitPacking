@@ -29,6 +29,10 @@ ENV TORCH_CUDA_ARCH_LIST="8.0"
 ENV DGL_HOME=/workspace/workloads/DGL-IBP
 ENV LD_LIBRARY_PATH=/workspace/ndzip/build/:$LD_LIBRARY_PATH
 RUN conda activate ibp && make install NVCC=$(which nvcc) GCC=$(which gcc) GPP=$(which g++)
+RUN make create_infinigen
+RUN conda activate infinigen && make install_infinigen
+RUN conda activate infinigen && make install_nvcomp
+RUN conda activate infinigen && make install_ibp
 ENV DGLBACKEND="pytorch"
 RUN conda activate ibp && make download_gnn
 RUN echo "conda activate ibp" >> ~/.bashrc

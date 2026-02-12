@@ -62,7 +62,7 @@ install_ndzip:
 
 install_ibp:
 	# Install IBP
-	pip install -v -e .
+	pip install -v . --no-build-isolation
 
 install_legion:
 	# Install Legion
@@ -80,16 +80,13 @@ install_colossalai:
 	cd workloads/ColossalAI; \
 	pip install -v -e .
 
+create_infinigen:
+	conda create -n infinigen python=3.9 -y
+
 install_infinigen:
 	cd workloads/InfiniGen-IBP; \
-	conda create -n infinigen python=3.9; \
-	conda activate infinigen; \
 	pip install -r requirements.txt; \
 	cd speedup; sh install.sh;
-	# (Re-)install IBP in the same environment
-	conda activate infinigen; \
-	$(MAKE) install_ibp; \
-	conda activate ibp;
 
 install: ${OUTPUT}
 	$(MAKE) install_nvcomp
@@ -98,7 +95,6 @@ install: ${OUTPUT}
 	$(MAKE) install_legion
 	$(MAKE) install_dgl
 	$(MAKE) install_colossalai
-	$(MAKE) install_infinigen
 
 clean_install:
 	rm -rf build;
@@ -225,9 +221,7 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
 llm:
-	conda activate infinigen; \
-	cd workloads/InfiniGen-IBP; $(MAKE) run_expt > ${OUTPUT}/llm_latency.log; \
-	conda activate ibp;
+	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_expt > ../../${OUTPUT}/llm_latency.log;
 
 # Figure 10
 llm_layer:
