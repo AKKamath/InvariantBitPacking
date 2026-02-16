@@ -22,8 +22,11 @@ We provide a docker image for IBP with all its dependencies installed. To access
 # Build the local docker image [~1 hour]
 docker build -t ibp-image -f Dockerfile .
 # Run the docker image
-docker run --gpus all -it \
-  -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image
+docker run --gpus 0 \
+  -e OMP_NUM_THREADS=4  -e MKL_NUM_THREADS=4 \
+  -e OPENBLAS_NUM_THREADS=4 -e NUMEXPR_NUM_THREADS=4 \
+  -e TORCH_NUM_THREADS=4 -e TORCH_INTEROP_THREADS=4 \
+  -it -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image
 ```
 
 ### Manual installation
