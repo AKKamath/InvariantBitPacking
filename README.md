@@ -2,7 +2,17 @@
 Invariant Bit Packing compression
 
 ## Hardware and software requirements
-TODO
+Hardware:
+* An NVIDIA A100 GPU.
+* Minimum 300 GB CPU memory.
+* 1 TB disk space.
+
+Docker and NVIDIA Container Toolkit (installation instructions given below) are enough for software; all other software requirements are handled within the Docker container. The machine we evaluated had:
+* Ubuntu 22.04 OS
+* CUDA 11.7
+* Python 3.8
+* Pytorch 1.13.1.
+
 
 ## Install
 First download this repo and setup the submodules. Then download the requisite datasets. 
