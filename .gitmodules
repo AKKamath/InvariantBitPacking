@@ -1,15 +1,15 @@
 [submodule "ndzip"]
 	path = ndzip
-	url = git@github.com:AKKamath/ndzip.git
+	url = https://github.com/AKKamath/ndzip.git
 [submodule "workloads/DGL-IBP"]
 	path = workloads/DGL-IBP
-	url = git@github.com:AKKamath/DGL-IBP.git
+	url = https://github.com/AKKamath/DGL-IBP.git
 [submodule "workloads/InfiniGen-IBP"]
 	path = workloads/InfiniGen-IBP
-	url = git@github.com:AKKamath/InfiniGen-IBP.git
+	url = https://github.com/AKKamath/InfiniGen-IBP.git
 [submodule "workloads/Legion-IBP"]
 	path = workloads/Legion-IBP
-	url = git@github.com:AKKamath/Legion-IBP.git
+	url = https://github.com/AKKamath/Legion-IBP.git
 [submodule "workloads/ColossalAI"]
 	path = workloads/ColossalAI
-	url = git@github.com:AKKamath/ColossalAI.git
+	url = https://github.com/AKKamath/ColossalAI.git
