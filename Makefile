@@ -82,11 +82,12 @@ install_colossalai:
 
 create_infinigen:
 	conda create -n infinigen python=3.9 -y
+	cd workloads/InfiniGen-IBP; \
+	conda run -n infinigen pip install -r requirements.txt;
 
 install_infinigen:
-	cd workloads/InfiniGen-IBP; \
-	pip install -r requirements.txt; \
-	cd speedup; sh install.sh;
+	cd workloads/InfiniGen-IBP/speedup; \
+	sh install.sh;
 
 install: ${OUTPUT}
 	$(MAKE) install_nvcomp
@@ -220,10 +221,10 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
 	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
+# Figure 10
 llm:
 	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_expt > ../../${OUTPUT}/llm_latency.log;
 
-# Figure 10
 llm_layer:
 	$(MAKE) nvcomp_kvcache
 	python scripts/extract_layer_comp.py ${OUTPUT} "kv_wiki_plaintiff kv_wiki_inst"
@@ -236,3 +237,19 @@ sens_sweep: ${OUTPUT}
 
 invariance: # Table 3
 	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag dlrm" > ${OUTPUT}/invariance.out
+
+# ------------------------ SLURM for tests ------------------------ 
+
+slurm_gnn:
+	sbatch scripts/sbatch_gnn.sh
+
+slurm_dlrm:
+	sbatch scripts/sbatch_dlrm.sh
+
+slurm_llm:
+	sbatch scripts/sbatch_llm.sh
+
+slurm:
+	$(MAKE) slurm_gnn
+	$(MAKE) slurm_dlrm
+	$(MAKE) slurm_llm
