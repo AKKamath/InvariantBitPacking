@@ -55,6 +55,7 @@ conda env config vars set CUDA_TOOLKIT_ROOT_DIR="${CONDA_PREFIX}"
 conda env config vars set CUDACXX="${CONDA_PREFIX}/bin/nvcc"
 conda env config vars set PATH="$CONDA_PREFIX/bin:$PATH"
 conda env config vars set LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+conda env config vars set DGL_HOME=$(pwd)/workloads/DGL-IBP
 # Otherwise if CUDA 11.7 is already installed, continue from here.
 make install_deps
 conda deactivate
