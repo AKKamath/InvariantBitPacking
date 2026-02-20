@@ -387,7 +387,7 @@ dependencies:
       - torchdata==0.5.1
       - torchmetrics==0.11.1
       - tqdm==4.67.1
-      - transformers==4.24
+      - transformers==4.39.3
       - typer==0.15.2
       - typing-inspection==0.4.0
       - tzdata==2025.2
