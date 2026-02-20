@@ -5,3 +5,6 @@ dist/**
 **.npy
 **.pt
 **.so
+
+**/__pycache__/
+results/
