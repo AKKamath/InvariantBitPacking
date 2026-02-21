@@ -208,7 +208,7 @@ gnn: ${OUTPUT} ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features $
 	${GNN_DATASET}/reddit/features ${GNN_DATASET}/products/features ${GNN_DATASET}/mag/features
 	${RUN_MPS}; \
 	cd workloads/Legion-IBP; make run_expts_singlegpu; \
-	make extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
+	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
 	${KILL_MPS};
 
 # Figure 9
