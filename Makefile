@@ -179,15 +179,19 @@ nvcomp_dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/fea
 	python tests/nvcomp_comparison.py dlrm > ${OUTPUT}/dlrm.log
 
 nvcomp_gnn: download_gnn
-	for i in pubmed citeseer cora reddit products mag; do \
+	for i in pubmed citeseer cora reddit products; do \
 		python tests/nvcomp_comparison.py $${i} > ${OUTPUT}/$${i}.log; \
 	done
+
+nvcomp_gnn_mag: download_gnn
+	python tests/nvcomp_comparison.py mag > ${OUTPUT}/mag.log
+	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
 
 nvcomp_comparison: # Tables 1, 2
 	$(MAKE) nvcomp_kvcache
 	$(MAKE) nvcomp_dlrm
 	$(MAKE) nvcomp_gnn
-	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
+	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
 
 copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 5
 	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
@@ -211,6 +215,12 @@ gnn: ${OUTPUT} ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features $
 	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
 	${KILL_MPS};
 
+gnn_mag: ${OUTPUT} ${GNN_DATASET}/mag/features
+	${RUN_MPS}; \
+	cd workloads/Legion-IBP; make run_mag_all_singlegpu; \
+	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
+	${KILL_MPS};
+
 # Figure 9
 dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
@@ -219,7 +229,7 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
 	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy ${OUTPUT}
 	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
-	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
+	tail -n 8 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
 # Figure 10
 llm: ${OUTPUT}
@@ -243,6 +253,9 @@ invariance: ${OUTPUT} # Table 3
 slurm_gnn: ${OUTPUT}
 	sbatch scripts/sbatch_gnn.sh
 
+slurm_gnn_mag: ${OUTPUT}
+	sbatch scripts/sbatch_gnn_mag.sh
+
 slurm_dlrm: ${OUTPUT}
 	sbatch scripts/sbatch_dlrm.sh
 
@@ -252,8 +265,13 @@ slurm_llm: ${OUTPUT}
 slurm_nvcomp: ${OUTPUT}
 	sbatch scripts/sbatch_comparison.sh
 
+slurm_nvcomp_mag: ${OUTPUT}
+	sbatch scripts/sbatch_comparison_mag.sh
+
 slurm: ${OUTPUT}
 	$(MAKE) slurm_gnn
+	$(MAKE) slurm_gnn_mag
 	$(MAKE) slurm_dlrm
 	$(MAKE) slurm_llm
 	$(MAKE) slurm_nvcomp
+	$(MAKE) slurm_nvcomp_mag

@@ -6,7 +6,7 @@
 #
 #SBATCH --time=14:00:00
 #SBATCH --ntasks=1
-#SBATCH --mem=300GB
+#SBATCH --mem=128GB
 #SBATCH --gres=gpu:a100:1
 #SBATCH --nodelist=mcnode22
 
