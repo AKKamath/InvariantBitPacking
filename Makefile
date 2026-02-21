@@ -167,7 +167,7 @@ kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
 
 # PLOTTED EXPERIMENTS
 nvcomp_kvcache:
-	python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kv_wiki_inst.log
+	#python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kv_wiki_inst.log
 	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kv_wiki_plaintiff.log
 
 nvcomp_dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
@@ -197,19 +197,19 @@ decomp_thput: # Figure 7
 	python tests/decompression_thput2.py > ${OUTPUT}/decomp_thput.out
 	tail -n 4 ${OUTPUT}/decomp_thput.out
 
-RUN_MPS = export CUDA_MPS_PIPE_DIRECTORY=./tmp; \
-	export CUDA_MPS_LOG_DIRECTORY=./tmp; \
+RUN_MPS = export CUDA_MPS_PIPE_DIRECTORY=$$(pwd)/tmp; \
+	export CUDA_MPS_LOG_DIRECTORY=$$(pwd)/tmp; \
 	nvidia-cuda-mps-control -d
 
 KILL_MPS =	echo quit | nvidia-cuda-mps-control
 
 # Figure 8
-gnn: ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features ${GNN_DATASET}/cora/features \
+gnn: ${OUTPUT} ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features ${GNN_DATASET}/cora/features \
 	${GNN_DATASET}/reddit/features ${GNN_DATASET}/products/features ${GNN_DATASET}/mag/features
 	${RUN_MPS}; \
 	cd workloads/Legion-IBP; make run_expts_singlegpu; \
+	make extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
 	${KILL_MPS};
-	cd workloads/Legion-IBP; make extract_expts_single > ${OUTPUT}/gnn_perf.log;
 
 # Figure 9
 dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
@@ -217,15 +217,15 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
 	${DLRM}/feature_14_part0.npy ${DLRM}/feature_15_part0.npy ${DLRM}/feature_16_part0.npy ${DLRM}/feature_17_part0.npy ${DLRM}/feature_18_part0.npy \
 	${DLRM}/feature_19_part0.npy ${DLRM}/feature_20_part0.npy ${DLRM}/feature_21_part0.npy ${DLRM}/feature_22_part0.npy ${DLRM}/feature_23_part0.npy \
-	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy
+	${DLRM}/feature_24_part0.npy ${DLRM}/feature_25_part0.npy ${OUTPUT}
 	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
 	tail -n 18 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
 # Figure 10
-llm:
+llm: ${OUTPUT}
 	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_expt > ../../${OUTPUT}/llm_latency.log;
 
-llm_layer:
+llm_layer: ${OUTPUT}
 	$(MAKE) nvcomp_kvcache
 	python scripts/extract_layer_comp.py ${OUTPUT} "kv_wiki_plaintiff kv_wiki_inst"
 
@@ -235,21 +235,25 @@ sens_sweep: ${OUTPUT}
 	python tests/sens_sweep.py kvcache 0 > ${OUTPUT}/sens_sweep_kvcache.out
 	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 
-invariance: # Table 3
+invariance: ${OUTPUT} # Table 3
 	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag dlrm" > ${OUTPUT}/invariance.out
 
 # ------------------------ SLURM for tests ------------------------ 
 
-slurm_gnn:
+slurm_gnn: ${OUTPUT}
 	sbatch scripts/sbatch_gnn.sh
 
-slurm_dlrm:
+slurm_dlrm: ${OUTPUT}
 	sbatch scripts/sbatch_dlrm.sh
 
-slurm_llm:
+slurm_llm: ${OUTPUT}
 	sbatch scripts/sbatch_llm.sh
 
-slurm:
+slurm_nvcomp: ${OUTPUT}
+	sbatch scripts/sbatch_comparison.sh
+
+slurm: ${OUTPUT}
 	$(MAKE) slurm_gnn
 	$(MAKE) slurm_dlrm
 	$(MAKE) slurm_llm
+	$(MAKE) slurm_nvcomp

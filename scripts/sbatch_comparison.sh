@@ -1,6 +1,6 @@
 #!/bin/bash --login
 #
-#SBATCH --job-name=gnn_run
+#SBATCH --job-name=nvcomp_comparison
 #SBATCH --output=output/%x-%j.out
 #SBATCH --error=output/%x-%j.err
 #
@@ -14,4 +14,4 @@
 
 eval "$(conda shell.bash hook)"
 conda activate ibp
-make gnn
+make nvcomp_comparison
