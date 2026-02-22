@@ -234,7 +234,7 @@ void test_compress(const at::Tensor &dataset)
     }
     cudaMemcpy(&comp_size, d_comp_size, sizeof(ull), cudaMemcpyDeviceToHost);
     printf("%s: Uncompressed bytes: %ld, compressed bytes: %llu, ratio: %f\n",
-        "Us", in_bytes, comp_size, (float)in_bytes / comp_size);
+        "IBP", in_bytes, comp_size, (float)in_bytes / comp_size);
     cudaCheckError();
 
     /*auto kernel = &test_decompressed_features_kernel<true>;
@@ -272,7 +272,7 @@ void test_compress(const at::Tensor &dataset)
             printf("Mismatch at %d: %x vs %x\n", i, ((int32_t*)cpu_features)[i], ((int32_t*)host_output_data)[i]);
             break;
         }
-    }
+    }*/
 
     cudaMemset(device_output_data, 0, in_bytes);
     decomp_start = TIME_NOW;
@@ -356,7 +356,7 @@ void test_compress(const at::Tensor &dataset)
             printf("Mismatch at %d: %x vs %x\n", i, ((int32_t*)cpu_features)[i], ((int32_t*)host_output_data)[i]);
             break;
         }
-    }*/
+    }
 
     cudaMemset(device_output_data, 0, in_bytes);
     decomp_start = TIME_NOW;
