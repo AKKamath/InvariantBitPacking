@@ -221,6 +221,9 @@ gnn_mag: ${OUTPUT} ${GNN_DATASET}/mag/features
 	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
 	${KILL_MPS};
 
+plot_gnn: ${OUTPUT}/gnn_perf.log
+	python scripts/plot_gnn_speedup.py ${OUTPUT}/gnn_perf.log ${OUTPUT}/gnn_perf
+
 # Figure 9
 dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
@@ -231,9 +234,15 @@ dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_
 	python tests/dlrm_comp_merged.py > ${OUTPUT}/dlrm_comp_merged.out
 	tail -n 8 ${OUTPUT}/dlrm_comp_merged.out > ${OUTPUT}/dlrm_perf.log
 
+plot_dlrm: ${OUTPUT}/dlrm_perf.log
+	python scripts/plot_dlrm.py ${OUTPUT}/dlrm_perf.log ${OUTPUT}/dlrm_perf
+
 # Figure 10
 llm: ${OUTPUT}
 	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_expt > ../../${OUTPUT}/llm_latency.log;
+
+plot_llm: ${OUTPUT}/llm_latency.log
+	python scripts/plot_llm_perf.py ${OUTPUT}/llm_latency.log ${OUTPUT}/llm_latency
 
 llm_layer: ${OUTPUT}
 	$(MAKE) nvcomp_kvcache
