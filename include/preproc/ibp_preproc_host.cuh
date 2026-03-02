@@ -26,28 +26,34 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
 {
     // Init data final mask and bitval for future use
     if(*comp_mask == nullptr)
-        cudaMalloc(comp_mask, vec_size * sizeof(T));
+        CUDA_CHECK(cudaMalloc(comp_mask, vec_size * sizeof(T)));
     if(*comp_bitval == nullptr)
-        cudaMalloc(comp_bitval, vec_size * sizeof(T));
+        CUDA_CHECK(cudaMalloc(comp_bitval, vec_size * sizeof(T)));
 
     // One mask and bitval for entire dataset
     T *d_mask, *d_bitval;
     T *h_mask;
-    cudaMalloc(&d_mask, vec_size * sizeof(T));
-    cudaMalloc(&d_bitval, vec_size * sizeof(T));
-    cudaMallocHost(&h_mask, vec_size * sizeof(T));
+    ull *h_bits_saved;
+    CUDA_CHECK(cudaMalloc(&d_mask, vec_size * sizeof(T)));
+    CUDA_CHECK(cudaMalloc(&d_bitval, vec_size * sizeof(T)));
+    if (threshold == -1.0f) {
+        cudaMallocHost(&h_mask, vec_size * sizeof(T));
+        CUDA_CHECK(cudaMallocHost(&h_bits_saved, sizeof(ull)));
+    }
+    else {
+        h_mask = (T*)malloc(vec_size * sizeof(T));
+        h_bits_saved = (ull*)malloc(sizeof(ull));
+    }
 
     ull *d_bits_saved;
-    ull *h_bits_saved;
-    cudaMalloc(&d_bits_saved, sizeof(ull));
-    cudaMallocHost(&h_bits_saved, sizeof(ull));
+    CUDA_CHECK(cudaMalloc(&d_bits_saved, sizeof(ull)));
     cudaCheckError();
 
     // Each counter is an int per bit of input element, so we need
     // vec_size inputs, 8 bits per byte, sizeof(T) bytes per input
     int *d_num_bits;
-    cudaMalloc(&d_num_bits, vec_size * 8 * sizeof(T) * sizeof(int));
-    cudaMemset(d_num_bits, 0, vec_size * 8 * sizeof(T) * sizeof(int));
+    CUDA_CHECK(cudaMalloc(&d_num_bits, vec_size * 8 * sizeof(T) * sizeof(int)));
+    CUDA_CHECK(cudaMemset(d_num_bits, 0, vec_size * 8 * sizeof(T) * sizeof(int)));
     count_bit_kernel<<<320, 128, 0, stream>>> (input_arr, num_vecs, vec_size, d_num_bits);
     cudaCheckError();
 
@@ -60,8 +66,8 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     DPRINTF("Num elems: %llu\n", num_vecs);
     for(threshold = min_thresh; threshold <= max_thresh; threshold += 0.05) {
         // Construct mask and bitval based on threshold
-        cudaMemset(d_mask, 0, vec_size * sizeof(T));
-        cudaMemset(d_bitval, 0, vec_size * sizeof(T));
+        CUDA_CHECK(cudaMemset(d_mask, 0, vec_size * sizeof(T)));
+        CUDA_CHECK(cudaMemset(d_bitval, 0, vec_size * sizeof(T)));
         create_mask<<<1, 512, 0, stream>>> (d_num_bits, d_mask, d_bitval, num_vecs, vec_size, threshold);
         // Find number of bits set in mask (theoretical bit savings)
         cudaMemcpy(h_mask, d_mask, vec_size * sizeof(T), cudaMemcpyDeviceToHost);
@@ -74,7 +80,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
         //    (double)(popc) * 100.0 / ((double)vec_size * sizeof(T) * 8.0));
 
         // Count real bits saved in the dataset
-        cudaMemset(d_bits_saved, 0, sizeof(long long unsigned));
+        CUDA_CHECK(cudaMemset(d_bits_saved, 0, sizeof(long long unsigned)));
         check_feats<<<320, 512, 0, stream>>> (input_arr, num_vecs, vec_size, d_mask, d_bitval, d_bits_saved);
         cudaStreamSynchronize(stream);
         cudaCheckError();
@@ -96,9 +102,15 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     cudaFree(d_num_bits);
     cudaFree(d_mask);
     cudaFree(d_bitval);
-    cudaFreeHost(h_mask);
+    if (threshold == -1.0f) {
+        cudaFreeHost(h_mask);
+        cudaFreeHost(h_bits_saved);
+    }
+    else {
+        free(h_mask);
+        free(h_bits_saved);
+    }
     cudaFree(d_bits_saved);
-    cudaFreeHost(h_bits_saved);
     return avg_comp_size;
 }
 
