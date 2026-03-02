@@ -188,9 +188,9 @@ nvcomp_gnn_mag: download_gnn
 	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products mag dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
 
 nvcomp_comparison: # Tables 1, 2
-	$(MAKE) nvcomp_kvcache
 	$(MAKE) nvcomp_dlrm
 	$(MAKE) nvcomp_gnn
+	$(MAKE) nvcomp_kvcache
 	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
 
 copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 5
@@ -213,12 +213,14 @@ gnn: ${OUTPUT} ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features $
 	${RUN_MPS}; \
 	cd workloads/Legion-IBP; make run_expts_singlegpu; \
 	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
+	make -s extract_breakdown > ../../${OUTPUT}/gnn_breakdown.log; \
 	${KILL_MPS};
 
 gnn_mag: ${OUTPUT} ${GNN_DATASET}/mag/features
 	${RUN_MPS}; \
 	cd workloads/Legion-IBP; make run_mag_all_singlegpu; \
 	make -s extract_expts_single > ../../${OUTPUT}/gnn_perf.log; \
+	make -s extract_breakdown > ../../${OUTPUT}/gnn_breakdown.log; \
 	${KILL_MPS};
 
 # Figure 9
@@ -257,10 +259,20 @@ slurm_gnn_mag: ${OUTPUT}
 	sbatch scripts/sbatch_gnn_mag.sh
 
 slurm_dlrm: ${OUTPUT}
-	sbatch scripts/sbatch_dlrm.sh
+	sbatch -c 32 scripts/sbatch_dlrm.sh
+
+slurm_dlrm_cores: ${OUTPUT}
+	for cores in 1 2 4 8 16 32; do \
+		sbatch -c $${cores} scripts/sbatch_dlrm_cores.sh; \
+	done
 
 slurm_llm: ${OUTPUT}
-	sbatch scripts/sbatch_llm.sh
+	sbatch -c 32 scripts/sbatch_llm.sh
+
+slurm_llm_cores: ${OUTPUT}
+	for cores in 1 2 4 8 16 32; do \
+		sbatch -c $${cores} scripts/sbatch_llm_cores.sh; \
+	done
 
 slurm_nvcomp: ${OUTPUT}
 	sbatch scripts/sbatch_comparison.sh
