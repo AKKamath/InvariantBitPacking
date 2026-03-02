@@ -323,9 +323,10 @@ for BATCH in BATCHES:
             f"{comp_transfer[T_SIZE][BATCH]:.4f}\t{base_transfer[T_SIZE][BATCH]:.4f}")
     print()
 
+header_parts = [f'{T_SIZE * 4}B speedup' for T_SIZE in T_SIZES]
+print(f"\t{chr(9).join(header_parts)}")
 for BATCH in BATCHES:
-    header_parts = [f'{T_SIZE * 4}B speedup' for T_SIZE in T_SIZES]
-    print(f"Batch {BATCH}\t{chr(9).join(header_parts)}")
+    print(f"Batch {BATCH}", end="")
     for T_SIZE in T_SIZES:
         run_sp = base_runtime[T_SIZE][BATCH] / comp_runtime[T_SIZE][BATCH]
         print(f"\t{run_sp:.4f}", end="")
