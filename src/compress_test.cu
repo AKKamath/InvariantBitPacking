@@ -39,15 +39,21 @@ void test_compress(const at::Tensor &dataset)
     void *comp_mask = nullptr;
     void *comp_bitval = nullptr;
 
+    cudaDeviceSynchronize();
     size_t compress_len;
+    auto preproc_start = TIME_NOW;
     if (data_size == 4) {
-        compress_len = ibp::preproc_data((int32_t*)cpu_features, total_nodes,
+        compress_len = ibp::preproc_data((int32_t*)cpu_features, nodes_per_gpu,
             feature_len, (int32_t**)&comp_mask, (int32_t**)&comp_bitval);
     } else {
-        compress_len = ibp::preproc_data((int64_t*)cpu_features, total_nodes,
+        compress_len = ibp::preproc_data((int64_t*)cpu_features, nodes_per_gpu,
             feature_len, (int64_t**)&comp_mask, (int64_t**)&comp_bitval);
     }
-    printf("Finished compression preprocessing; compressed len %zu; orig %zu\n", compress_len * data_size, feature_len * data_size);
+    auto preproc_end = TIME_NOW;
+    auto preproc_time = TIME_DIFF(preproc_start, preproc_end);
+    printf("Finished compression preprocessing; compressed len %zu; orig %zu; time %f ms\n",
+        compress_len * data_size, feature_len * data_size, (float)preproc_time / 1000.0);
+    cudaCheckError();
 
     long bytes_per_feat = feature_len * data_size;
     long in_bytes = bytes_per_feat * nodes_per_gpu;
@@ -69,20 +75,24 @@ void test_compress(const at::Tensor &dataset)
     }
 
     // Setup an array of pointers to the start of each chunk
-    void ** host_uncompressed_ptrs;
+    void ** host_uncompressed_ptrs, **host_cpu_feat_ptrs;
     cudaMallocHost(&host_uncompressed_ptrs, sizeof(size_t)*batch_size);
+    cudaMallocHost(&host_cpu_feat_ptrs, sizeof(size_t)*batch_size);
     for (size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
-        host_uncompressed_ptrs[ix_chunk] = device_input_data + bytes_per_feat;
+        host_uncompressed_ptrs[ix_chunk] = device_input_data + bytes_per_feat * ix_chunk;
+        host_cpu_feat_ptrs[ix_chunk] = (char*)cpu_features + bytes_per_feat * ix_chunk;
     }
 
     size_t* device_uncompressed_bytes;
-    void ** device_uncompressed_ptrs;
+    void ** device_uncompressed_ptrs, **dev_cpu_feat_ptrs;
     cudaMalloc(&device_uncompressed_bytes, sizeof(size_t) * batch_size);
     cudaMalloc(&device_uncompressed_ptrs, sizeof(size_t) * batch_size);
+    cudaMalloc(&dev_cpu_feat_ptrs, sizeof(size_t) * batch_size);
     cudaCheckError();
 
     cudaMemcpyAsync(device_uncompressed_bytes, host_uncompressed_bytes, sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_uncompressed_ptrs, host_uncompressed_ptrs, sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(dev_cpu_feat_ptrs, host_cpu_feat_ptrs, sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream);
 
     // Overallocate output bytes
     void **host_compressed_ptrs;
@@ -143,9 +153,11 @@ void test_compress(const at::Tensor &dataset)
         std::unique_ptr<ndzip::cuda_compressor<float>> ndzip_comp = ndzip::make_cuda_compressor<float>(req, stream);
         std::unique_ptr<ndzip::cuda_decompressor<float>> ndzip_decomp = ndzip::make_cuda_decompressor<float>(1, stream);
 
-        ndzip_comp->compress((float*)device_input_data, ext, (uint32_t*)compressed_buffer,
+        auto comp_start = TIME_NOW;
+        ndzip_comp->compress((float*)cpu_features, ext, (uint32_t*)compressed_buffer,
             (uint32_t*)device_compressed_bytes);
         cudaDeviceSynchronize();
+        auto comp_end = TIME_NOW;
         cudaCheckError();
         cudaMemcpy(host_compressed_bytes, device_compressed_bytes, sizeof(uint32_t), cudaMemcpyDeviceToHost);
         *host_compressed_bytes *= sizeof(uint32_t);
@@ -160,7 +172,8 @@ void test_compress(const at::Tensor &dataset)
         cudaDeviceSynchronize();
         cudaCheckError();
         decomp_end = TIME_NOW;
-        printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "ndzip",
+        printf("%s: Time taken to compress %f ms. Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "ndzip",
+            (float)TIME_DIFF(comp_start, comp_end) / 1000.0,
             (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
             (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
             (float)*(uint32_t*)host_compressed_bytes / TIME_DIFF(decomp_start, decomp_end));
@@ -176,9 +189,11 @@ void test_compress(const at::Tensor &dataset)
         std::unique_ptr<ndzip::cuda_compressor<double>> ndzip_comp = ndzip::make_cuda_compressor<double>(req, stream);
         std::unique_ptr<ndzip::cuda_decompressor<double>> ndzip_decomp = ndzip::make_cuda_decompressor<double>(1, stream);
 
-        ndzip_comp->compress((double*)device_input_data, ext, (uint64_t*)compressed_buffer,
+        auto comp_start = TIME_NOW;
+        ndzip_comp->compress((double*)cpu_features, ext, (uint64_t*)compressed_buffer,
             (uint32_t*)device_compressed_bytes);
         cudaDeviceSynchronize();
+        auto comp_end = TIME_NOW;
         cudaCheckError();
         cudaMemcpy(host_compressed_bytes, device_compressed_bytes, sizeof(uint32_t), cudaMemcpyDeviceToHost);
         *host_compressed_bytes *= sizeof(uint64_t);
@@ -193,7 +208,8 @@ void test_compress(const at::Tensor &dataset)
         cudaDeviceSynchronize();
         cudaCheckError();
         auto decomp_end = TIME_NOW;
-        printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "ndzip",
+        printf("%s: Time taken to compress %f ms. Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "ndzip",
+            (float)TIME_DIFF(comp_start, comp_end) / 1000.0,
             (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
             (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
             (float)*(uint32_t*)host_compressed_bytes / TIME_DIFF(decomp_start, decomp_end));
@@ -221,6 +237,7 @@ void test_compress(const at::Tensor &dataset)
     ull *d_comp_size, comp_size = 0;
     cudaMalloc(&d_comp_size, sizeof(ull));
     cudaMemset(d_comp_size, 0, sizeof(ull));
+    auto comp_start = TIME_NOW;
     if(data_size == 4) {
         ibp::compress_inplace((int32_t*)compressed_buffer,
             (int32_t*)cpu_features, nodes_per_gpu, (int64_t)feature_len,
@@ -232,6 +249,8 @@ void test_compress(const at::Tensor &dataset)
             (ull*)comp_mask, (ull*)comp_bitval, comp_bitmask, (void*)nullptr, (void*)nullptr,
             d_comp_size, stream);
     }
+    cudaDeviceSynchronize();
+    auto comp_end = TIME_NOW;
     cudaMemcpy(&comp_size, d_comp_size, sizeof(ull), cudaMemcpyDeviceToHost);
     printf("%s: Uncompressed bytes: %ld, compressed bytes: %llu, ratio: %f\n",
         "IBP", in_bytes, comp_size, (float)in_bytes / comp_size);
@@ -374,7 +393,8 @@ void test_compress(const at::Tensor &dataset)
     decomp_end = TIME_NOW;
     cudaMemcpy(host_output_data, device_output_data, in_bytes, cudaMemcpyDeviceToHost);
 
-    printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "IBP",
+    printf("%s: Time taken to compress %f ms. Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", "IBP",
+        (float)(TIME_DIFF(comp_start, comp_end) + preproc_time) / 1000.0,
         (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
         (float)in_bytes / TIME_DIFF(decomp_start, decomp_end),
         (float)comp_size / TIME_DIFF(decomp_start, decomp_end));
@@ -398,7 +418,8 @@ void test_compress(const at::Tensor &dataset)
     }
     cudaDeviceSynchronize();
     decomp_end = TIME_NOW;
-    printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s\n", "Transfer",
+    printf("%s: Time taken to compress %f ms. Time taken to decompress: %f ms. Throughput: %f MB/s\n", "Transfer",
+        (float)(TIME_DIFF(comp_start, comp_end) + preproc_time) / 1000.0,
         (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,
         (float)in_bytes / TIME_DIFF(decomp_start, decomp_end));
     cudaCheckError();
@@ -417,6 +438,7 @@ void test_compress(const at::Tensor &dataset)
     cudaFreeHost(host_output_data);
     cudaFree(comp_bitmask);
     cudaFree(d_comp_size);
+    cudaCheckError();
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

@@ -84,6 +84,15 @@ extern bool ibp_print_debug;
       exit(EXIT_FAILURE);                                      \
     }                                                          \
   }
+#define CUDA_CHECK(func)                                       \
+  {                                                            \
+    cudaError_t e = func;                                      \
+    if (e != cudaSuccess) {                                    \
+      printf("Cuda failure %s:%d: '%s'\n", __FILE__, __LINE__, \
+             cudaGetErrorString(e));                           \
+      exit(EXIT_FAILURE);                                      \
+    }                                                          \
+  }
 
 __device__ __forceinline__
 void async_cp(int *shared, const int *global, int ints) {

@@ -36,8 +36,9 @@
             sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream); \
         cudaMemset(device_compressed_bytes, 0, sizeof(size_t) * batch_size); \
         cudaCheckError(); \
+        auto comp_start = TIME_NOW; \
         comp_res = nvcompBatched##ALGO##CompressAsync( \
-            device_uncompressed_ptrs,\
+            dev_cpu_feat_ptrs,\
             device_uncompressed_bytes,\
             chunk_size, \
             batch_size, \
@@ -48,6 +49,8 @@
             nvcompBatched##ALGO##DefaultOpts, \
             stream); \
         cudaStreamSynchronize(stream); \
+        auto comp_end = TIME_NOW; \
+        \
         size_t total_compressed = 0; \
         if (comp_res != nvcompSuccess) \
         { \
@@ -100,7 +103,8 @@
             std::cerr << "Failed decompression!" << std::endl; \
             assert(decomp_res == nvcompSuccess); \
         } \
-        printf("%s: Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", #ALGO, \
+        printf("%s: Time taken to compress %f ms. Time taken to decompress: %f ms. Throughput: %f MB/s; True thput: %f MB/s\n", #ALGO, \
+            (float)TIME_DIFF(comp_start, comp_end) / 1000.0, \
             (float)TIME_DIFF(decomp_start, decomp_end) / 1000.0,  \
             (float)in_bytes / TIME_DIFF(decomp_start, decomp_end), \
             (float)total_compressed / TIME_DIFF(decomp_start, decomp_end)); \
