@@ -1,4 +1,5 @@
 # Invariant Bit Packing
+[![DOI](https://zenodo.org/badge/862131761.svg)](https://doi.org/10.5281/zenodo.18869046)
 Invariant Bit Packing compression
 
 ## Hardware and software requirements
