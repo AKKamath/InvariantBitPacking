@@ -1,5 +1,9 @@
 # Invariant Bit Packing
-Invariant Bit Packing compression
+[![DOI](https://zenodo.org/badge/862131761.svg)](https://doi.org/10.5281/zenodo.18869046)
+
+This repository contains the source code, profiling scripts, and workloads evaluated for Invariant Bit Packing (IBP) compression, introduced in the EuroSys 2026 paper titled "Reducing the GPU Memory Bottleneck with Lossless Compression for ML". IBP identifies and eliminates low-entropy, invariant bits _across_ sets of tensors, improving throughput by employing GPU-optimized decompression mechanisms, leveraging warp parallelism, low-overhead bit operations, and asynchronous GPU-optimized PCIe transfers. We provide easy-to-use APIs, showcasing them by adding IBP support to GNN training, as well as DLRM and LLM inference frameworks.
+
+Full details of our implementation can be found in our paper: *TBD*
 
 ## Hardware and software requirements
 Hardware:
@@ -10,8 +14,10 @@ Hardware:
 Docker and NVIDIA Container Toolkit (installation instructions given below) are enough for software; all other software requirements are handled within the Docker container. The machine we evaluated had:
 * Ubuntu 22.04 OS
 * CUDA 11.7
-* Python 3.8
-* Pytorch 1.13.1.
+* Python 3.9
+* Pytorch 1.13.1
+
+Parts of the work have also been tested with CUDA 12.1 and PyTorch 2.1, but various libraries need to be adjusted to ensure compatibility with these versions.
 
 
 ## Install
@@ -65,7 +71,7 @@ pip install torchdata==0.7.0
 make download_gnn
 ```
 
-## Running experiments
+## Replicating experiments
 Before running any experiment ensure you are in the ibp conda environment. This can be ensured by running the following command:
 ```
 conda activate ibp
@@ -95,3 +101,62 @@ Main experiments:
 Other experiments:
 * Table 3: results/invariance.out
 * Figure 7: results/decomp_thput.out
+
+# API Documentation
+We provide both high-level PyTorch and low-level CUDA API for integration with projects.
+
+## PyTorch
+After installing IBP, you can import it into your program in the following manner:
+```
+import torch
+import ibp
+```
+Make sure torch is imported before IBP, otherwise you will get errors.
+The API for IBP is as follows:
+```Python
+# Whether to output IBP debug statements.
+ibp.print_debug(flag: bool)
+
+# Preprocess the provided dataset. The dataset is expected to be a 2D Tensor [num_vecs x vec_size]
+# You can reshape/view your tensor if it is higher dimensional. Threshhold is the invariant percentage to fix.
+# If None, we sweep over 0.7 to 0.95 to find a good threshold.
+# Returns: mask and bitval GPU tensors
+ibp.preprocess(dataset: torch.Tensor, threshold: float | None = None)
+
+# Preprocess the provided dataset using K-means. Specify the number of centroids to use.
+# Returns: mask and bitval 2D GPU tensors.
+ibp.preprocess_kmeans(dataset: torch.Tensor, centroids: int, threshold: float | None = None)
+
+# Computes the compressed size of a dataset. Non-blocking call.
+# This function calculates the size of each element of the compressed dataset.
+# Optionally, an index array can be provided to specify which vectors to consider.
+# Non-blocking call. Synchronize CUDA before accessing output tensor.
+# index_array_ Optional tensor specifying the indices of the vectors to be considered.
+# Returns: A GPU tensor representing the compressed size of each element of the dataset.
+ibp.get_compress_size(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
+
+# Compresses dataset in-place. Used for CPU-side compression.
+# Optionally, an index array can be provided to specify which vectors to consider.
+# Returns: A GPU tensor bitmask marking compressed tensors
+ibp.compress_inplace(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
+
+# Fetches and decompresses compressed data into GPU memory.
+# comp_len provides an estimated compressed size per tensor, which can help improve performance if provided.
+# Optionally, an index array can be provided to specify which vectors to consider.
+# Returns: A GPU tensor with the indexed tensors decompressed.
+ibp.decompress_fetch(comp_dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, bitmask: torch.Tensor, device: torch.Device, comp_len: int | None = None,\
+                     index_arr: torch.Tensor | None = None)
+```
+
+# Source code and repository structure
+Our respository has the following folders, with contents as described:
+* [ibp](ibp/): Contains the PyTorch module functions.
+* [include](include/): Contains the header-only CUDA files for IBP functionality.
+* [scripts](scripts/): Contains the plotting/extraction scripts for results from IBP evaluation.
+* [src](src/): Contains the source code for the PyTorch module, converting the high-level Python calls to low-level CUDA functions.
+* [tests](tests/): Contains scripts for some of the IBP evaluations.
+* [workloads](workloads/): Contains submodules for GNN, DLRM, and LLM frameworks used during evaluation.
+
+
+# Citation
+If you use our work, please cite our paper: TBD
