@@ -3,7 +3,13 @@
 
 This repository contains the source code, profiling scripts, and workloads evaluated for Invariant Bit Packing (IBP) compression, introduced in the EuroSys 2026 paper titled "Reducing the GPU Memory Bottleneck with Lossless Compression for ML". IBP identifies and eliminates low-entropy, invariant bits _across_ sets of tensors, improving throughput by employing GPU-optimized decompression mechanisms, leveraging warp parallelism, low-overhead bit operations, and asynchronous GPU-optimized PCIe transfers. We provide easy-to-use APIs, showcasing them by adding IBP support to GNN training, as well as DLRM and LLM inference frameworks.
 
-Full details of our implementation can be found in our paper: *TBD*
+Full details of our implementation can be found in our paper:
+<pre>
+<b>Reducing the GPU Memory Bottleneck with Lossless Compression for ML</b>
+Aditya K Kamath, Arvind Krishnamurthy, Marco Canini, Simon Peter
+<i>21st European Conference on Computer Systems (EuroSys), 2026</i>
+DOI: https://doi.org/10.1145/3767295.3803595
+</pre>
 
 ## Hardware and software requirements
 Hardware:
