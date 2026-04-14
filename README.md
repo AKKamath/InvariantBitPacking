@@ -86,26 +86,34 @@ conda activate ibp
 ### Run commands
 ```
 # Main experiments:
-make nvcomp_comparison; # Tables 1 and 2
+make nvcomp_comparison; # Tables 1, 2, 3
 make gnn; # Figure 8
-make dlrm; # Figure 9
-make llm; # Figure 10
+make dlrm; # Figure 10
+make llm; # Figure 11
 # Other experiments:
-make invariance; # Table 3
+make invariance; # Table 4
 make decomp_thput; # Figure 7
 ```
 
 ### Results
-You can run ```cat {filename}``` to output the results to the terminal. This can then be copy-pasted into your favorite graph plotting tool (e.g., Excel, Google Sheets, matplotlib).
+To generate the graphs for the main experiments, you can run the following commands. The generated graphs will be in the results/ folder.
+```
+# Main experiments:
+make plot_gnn; # Figure 8
+make plot_dlrm; # Figure 10
+make plot_llm; # Figure 11
+```
+
+You can also run ```cat {filename}``` to output the results to the terminal. This can then be copy-pasted into your favorite graph plotting tool (e.g., Excel, Google Sheets, matplotlib).
 
 Main experiments:
 * Tables 1, 2 - results/nvcomp_comparison.log
 * Figure 8 - results/gnn_perf.log
-* Figure 9 - results/dlrm_perf.log
-* Figure 10 - results/llm_latency.log
+* Figure 10 - results/dlrm_perf.log
+* Figure 11 - results/llm_latency.log
 
 Other experiments:
-* Table 3: results/invariance.out
+* Table 4: results/invariance.out
 * Figure 7: results/decomp_thput.out
 
 # API Documentation
