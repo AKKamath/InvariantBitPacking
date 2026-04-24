@@ -173,4 +173,23 @@ Our respository has the following folders, with contents as described:
 
 
 # Citation
-If you use our work, please cite our paper: TBD
+If you use our work, please cite our paper:
+<pre>
+@inproceedings{IBP:Eurosys:2026,
+  author = {Kamath, Aditya K and Krishnamurthy, Arvind and Canini, Marco and Peter, Simon},
+  title = {Reducing the GPU Memory Bottleneck with Lossless Compression for ML},
+  year = {2026},
+  isbn = {9798400722127},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  url = {https://doi.org/10.1145/3767295.3803595},
+  doi = {10.1145/3767295.3803595},
+  abstract = {Machine learning (ML) training and inference often process data sets far exceeding GPU memory capacity, forcing them to rely on PCIe for on-demand tensor transfers, causing critical transfer bottlenecks. Lossy compression has been proposed to relieve bottlenecks but introduces workload-dependent accuracy loss, making it complex or even prohibitive to use in existing ML deployments.We explore lossless compression as an alternative that avoids this deployment complexity. We identify where lossless compression can be integrated into ML pipelines while minimizing interference with GPU execution. Based on our findings, we introduce Invariant Bit Packing (IBP), a novel lossless compression algorithm designed to minimize data transfer time for ML. IBP identifies and eliminates invariant bits across groups of tensors, improving throughput through GPU-optimized decompression that leverages warp parallelism, low-overhead bit operations, and asynchronous PCIe transfers. We provide easy-to-use APIs, showcasing them by adding IBP support to GNN training, as well as DLRM and LLM inference frameworks. IBP achieves, on average, 74\% faster GNN training, 180\% faster DLRM embedding lookup, and 25\% faster LLM inference.},
+  booktitle = {Proceedings of the 21st European Conference on Computer Systems},
+  pages = {899–918},
+  numpages = {20},
+  keywords = {lossless compression, GPU systems, PCIe bottleneck, data movement, machine learning systems, tensor compression, GNN, DLRM, LLM inference},
+  location = {McEwan Hall/The University of Edinburgh, Edinburgh, Scotland UK},
+  series = {EUROSYS '26}
+}
+</pre>
