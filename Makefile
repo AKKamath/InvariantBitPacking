@@ -9,7 +9,7 @@ GPP ?= $${CONDA_PREFIX}/bin/g++
 NVCC ?= $${CONDA_PREFIX}/bin/nvcc
 
 .PHONY: kvcache dlrm gnn nvcomp_comparison install_miniconda create_env install_cuda \
-	install_deps install_nvcomp install_ndzip install_ibp install_legion install_dgl install \
+	install_deps install_nvcomp install_ndzip install_ibp install_ibp_test install_legion install_dgl install \
 	clean_install download_dlrm copy_test2 decompress_pcie sens_thresh kmeans nvcomp_kvcache \
 	nvcomp_dlrm nvcomp_gnn nvcomp_comparison copy_test decomp_thput dlrm llm_layer sens_sweep invariance
 
@@ -64,6 +64,10 @@ install_ibp:
 	# Install IBP
 	pip install -v . --no-build-isolation
 
+install_ibp_test:
+	# Install IBP test extension (depends on nvcomp + ndzip)
+	pip install -v ./ibp_cuda_test --no-build-isolation
+
 install_legion:
 	# Install Legion
 	cd workloads/Legion-IBP; \
@@ -93,6 +97,7 @@ install: ${OUTPUT}
 	$(MAKE) install_nvcomp
 	$(MAKE) install_ndzip
 	$(MAKE) install_ibp
+	$(MAKE) install_ibp_test
 	$(MAKE) install_legion
 	$(MAKE) install_dgl
 	$(MAKE) install_colossalai

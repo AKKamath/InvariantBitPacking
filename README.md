@@ -51,6 +51,14 @@ docker run --gpus 0 \
   -it -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image
 ```
 
+### Minimal installation (Only IBP library)
+```
+pip install torch # Make sure torch is already installed.
+pip install -v . --no-build-isolation
+```
+
+You can then use ibp in your Python files by including it, as detailed below in API Documentation.
+
 ### Manual installation
 The Docker setup is recommended for ease of use. Manual installation can cause problems if the system's library versions mismatch with those expected. Use at your own risk.
 
