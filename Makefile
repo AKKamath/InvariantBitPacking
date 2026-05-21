@@ -174,6 +174,7 @@ kmeans: ${DLRM}/asteroid.f32 ${OUTPUT}
 nvcomp_kvcache:
 	#python tests/nvcomp_comparison.py kvcache 0 > ${OUTPUT}/kv_wiki_inst.log
 	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kv_wiki_plaintiff.log
+	python tests/nvcomp_comparison.py kvcachebf 1 > ${OUTPUT}/kv_wiki_plaintiff_bf.log
 
 nvcomp_dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
@@ -196,7 +197,7 @@ nvcomp_comparison: # Tables 1, 2
 	$(MAKE) nvcomp_dlrm
 	$(MAKE) nvcomp_gnn
 	$(MAKE) nvcomp_kvcache
-	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products dlrm kv_wiki_plaintiff" > ${OUTPUT}/nvcomp_comparison.log
+	python scripts/extract_compression.py ${OUTPUT} "pubmed citeseer cora reddit products dlrm kv_wiki_plaintiff kv_wiki_plaintiff_bf" > ${OUTPUT}/nvcomp_comparison.log
 
 copy_test: ${BUILD}/copy_test.exe ${OUTPUT} # Figure 5
 	./${BUILD}/copy_test.exe > ${OUTPUT}/output.txt
