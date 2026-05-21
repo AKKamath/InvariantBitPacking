@@ -16,13 +16,13 @@ namespace ibp {
  * @param chunk_size [Unused] Size of each chunk.
  * @param comp_mask Returned mask for compression. Size is vec_size.
  * @param comp_bitval Returned bit values for compression. Size is vec_size.
- * @param threshold Fixed threshold for mask/bitval calculation. Default is -1, which means the best threshold will be found.
+ * @param def_threshold Fixed threshold for mask/bitval calculation. Default is -1, which means the best threshold will be found.
  *
  * @return Average compressed length of each element.
  */
 template<typename T>
 int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
-    T **comp_bitval, float threshold = -1.0, cudaStream_t stream = 0)
+    T **comp_bitval, float def_threshold = -1.0, cudaStream_t stream = 0)
 {
     // Init data final mask and bitval for future use
     if(*comp_mask == nullptr)
@@ -36,7 +36,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     ull *h_bits_saved;
     CUDA_CHECK(cudaMalloc(&d_mask, vec_size * sizeof(T)));
     CUDA_CHECK(cudaMalloc(&d_bitval, vec_size * sizeof(T)));
-    if (threshold == -1.0f) {
+    if (def_threshold == -1.0f) {
         cudaMallocHost(&h_mask, vec_size * sizeof(T));
         CUDA_CHECK(cudaMallocHost(&h_bits_saved, sizeof(ull)));
     }
@@ -58,13 +58,13 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     cudaCheckError();
 
     // Use provided threshold if available, otherwise sweep 0.7 - 1.0
-    float min_thresh = threshold < 0 ? 0.7 : threshold;
-    float max_thresh = threshold < 0 ? 1.0 : threshold;
+    float min_thresh = def_threshold < 0 ? 0.7 : def_threshold;
+    float max_thresh = def_threshold < 0 ? 1.0 : def_threshold;
 
     double max_saved = 0;
     int avg_comp_size = 0;
     DPRINTF("Num elems: %llu\n", num_vecs);
-    for(threshold = min_thresh; threshold <= max_thresh; threshold += 0.05) {
+    for(float threshold = min_thresh; threshold <= max_thresh; threshold += 0.05) {
         // Construct mask and bitval based on threshold
         CUDA_CHECK(cudaMemset(d_mask, 0, vec_size * sizeof(T)));
         CUDA_CHECK(cudaMemset(d_bitval, 0, vec_size * sizeof(T)));
@@ -102,7 +102,7 @@ int preproc_data(T *input_arr, ull num_vecs, ull vec_size, T **comp_mask,
     cudaFree(d_num_bits);
     cudaFree(d_mask);
     cudaFree(d_bitval);
-    if (threshold == -1.0f) {
+    if (def_threshold == -1.0f) {
         cudaFreeHost(h_mask);
         cudaFreeHost(h_bits_saved);
     }
