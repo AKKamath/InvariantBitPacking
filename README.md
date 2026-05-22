@@ -35,7 +35,7 @@ cd InvariantBitPacking
 git submodule update --init --recursive
 
 make download_dlrm # 16GB download
-make download_llm # 8GB download
+make download_llm # 20GB download
 ```
 
 ### Docker installation (Recommended)

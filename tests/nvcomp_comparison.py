@@ -43,10 +43,11 @@ if benchmark == "dlrm":
         ibp_cuda_test.test_compress(features)
 elif benchmark == "kvcache":
     folders = os.listdir(KVCACHE_FOLDER)
-    index = 0
-    if len(sys.argv) > 2:
-        index = int(sys.argv[2])
-    folder = folders[index]
+    folder = ''
+    for x in folders:
+        if 'plaintiff' in x and 'facebook_opt' in x:
+            folder = x
+            break
     print(folders, flush=True)
     print(folder, flush=True)
     files = os.listdir(KVCACHE_FOLDER + folder)
@@ -88,10 +89,11 @@ elif benchmark == "kvcache":
             ibp_cuda_test.test_compress(feature.pin_memory())
 elif benchmark == "kvcachebf":
     folders = os.listdir(KVCACHE_FOLDER)
-    index = 0
-    if len(sys.argv) > 2:
-        index = int(sys.argv[2])
-    folder = folders[index]
+    folder = ''
+    for x in folders:
+        if 'google' in x:
+            folder = x
+            break
     print(folders, flush=True)
     print(folder, flush=True)
     files = os.listdir(KVCACHE_FOLDER + folder)

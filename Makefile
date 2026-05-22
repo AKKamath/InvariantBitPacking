@@ -135,7 +135,7 @@ download_gnn: ${GNN_DATASET}/pubmed/features ${GNN_DATASET}/citeseer/features ${
 	${GNN_DATASET}/reddit/features ${GNN_DATASET}/products/features ${GNN_DATASET}/mag/features
 
 llm_data.zip:
-	wget https://zenodo.org/records/18572812/files/Archive.zip?download=1 -O llm_data.zip
+	wget https://zenodo.org/records/20338076/files/Archive.zip?download=1 -O llm_data.zip
 
 download_llm: llm_data.zip
 	mkdir -p kvcache/
