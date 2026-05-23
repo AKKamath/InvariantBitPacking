@@ -11,7 +11,7 @@ Aditya K Kamath, Arvind Krishnamurthy, Marco Canini, Simon Peter
 DOI: https://doi.org/10.1145/3767295.3803595
 </pre>
 
-## Hardware and software requirements
+## Hardware and software that we tested on
 Hardware:
 * An NVIDIA A100 GPU.
 * Minimum 300 GB CPU memory.
@@ -25,6 +25,12 @@ Docker and NVIDIA Container Toolkit (installation instructions given below) are 
 
 Parts of the work have also been tested with CUDA 12.1 and PyTorch 2.1, but various libraries need to be adjusted to ensure compatibility with these versions.
 
+Anything newer _should_ work for just the IBP library. IBP's only dependency is Torch. In setup.py you may need to add flags for newer GPUs. 
+For example for Hopper you can uncomment in line 21/22:
+```python
+#cc_flag.append("-gencode")
+#cc_flag.append("arch=compute_90,code=sm_90")
+```
 
 ## Install
 First download this repo and setup the submodules. Then download the requisite datasets. 
@@ -177,6 +183,50 @@ ibp.compress_inplace(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Te
 ibp.decompress_fetch(comp_dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, bitmask: torch.Tensor, device: torch.Device, comp_len: int | None = None,\
                      index_arr: torch.Tensor | None = None, output_tensor: torch.Tensor | None = None)
 ```
+
+### Example usage
+Here we show exactly how IBP could be integrated, taking an example of FlexGen. You can see the real changes in [pytorch_backend.py](workloads/InfiniGen-IBP/speedup/flexgen/original/pytorch_backend.py) and [flex_gemma.py](workloads/InfiniGen-IBP/speedup/flexgen/original/flex_gemma.py) (`CTRL + F ibp` to see them). The real changes are a bit more complicated than shown here as they have some finetuning to maximize the performance gains from compression.
+
+First, we add the preprocess and compress functions to FlexGen's TorchTensor wrapper class. Later when we've loaded the weights to the CPU, we call them:
+
+```diff
+# Add preprocess and compress functions to FlexGen's TorchTensor class
+class TorchTensor:
+    ...
++   def ibp_preprocess(self):
++       self.mask, self.bitval = ibp.preprocess(self.data.view(torch.int64))
++
++   def ibp_compress(self):
++       self.bitmask = ibp.compress_inplace(self.data.view(torch.int64), self.mask, self.bitval)
++       self.comp_len = ibp.get_single_compress_len(self.data.view(torch.int64), self.mask, self.bitval)
+...
+# Then when initializing the weights, call these to compress the weights
+def init_weight_list(weight_specs, policy, env):
+    ...
++   # Stored in CPU and IBP turned on
++   if home == env.cpu and policy.use_ibp:
++      # For simplicity, we only compress 2D tensors here
++      # In reality, we can view/reshape larger dimension to 2D to compress them as well.
++      if len(weight.data.shape) == 2:
++          weight.ibp_preprocess()
++          weight.ibp_compress()
+
+```
+
+Notice that we change the view of the tensor to torch.int64; IBP operates on bits so the datatype of the input tensor doesn't matter as long as it's the same when both compressing and decompressing. By using int64, we use 8-byte chunks which reduces the 'participation bit' headers in the compressed tensors. We get back our float values losslessly when decompressing.
+Below we see how data is decompressed later when transferring from the CPU.
+```diff
+def general_copy(dst: TorchTensor, dst_indices: Tuple[slice],
+                 src: TorchTensor, src_indices: Tuple[slice]):
+    ...
+    src_tensor = src.data[src_indices] if src_indices else src.data
+    dst_tensor = dst.data[dst_indices] if dst_indices else dst.data
++   ibp.decompress_fetch(src_tensor.view(torch.int64), src.mask, src.bitval,
++                        src.bitmask, dst.device.dev, output_tensor=dst_tensor.view(torch.int64),
++                        comp_len=src.comp_len)
+-   dst_tensor.copy_(src_tensor, non_blocking=True)
+```
+IBP acts as a drop-in replacement for the copy operation which moves the data from CPU to GPU. Within this one function we copy and decompress simultaneously. We pass a int64 view of the destination tensor, so that it matches the src. The actual dst_tensor is bfloat16, and will have those values properly.
 
 # Source code and repository structure
 Our respository has the following folders, with contents as described:
