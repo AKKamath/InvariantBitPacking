@@ -19,6 +19,15 @@ def preprocess_kmeans(dataset, centroids, threshold=None):
 def get_compress_size(dataset, mask, bitval, index_arr=None, compress_total=None):
     return ibp_cuda.get_compress_size(dataset, mask, bitval, index_arr, compress_total)
 
+def get_single_compress_len(dataset, mask, bitval, index_arr=None):
+    comp_sizes = get_compress_size(dataset, mask, bitval)
+    torch.cuda.synchronize()
+    # Calculations
+    og_size = dataset.numel() * dataset.element_size()
+    comp_size = int(torch.sum(comp_sizes))
+    ratio = og_size / comp_size
+    return int(comp_size / og_size * dataset.size(1))
+
 # Returns bitmask marking compressed tensors
 def compress_inplace(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress_inplace(dataset, mask, bitval, index_arr)
@@ -27,6 +36,6 @@ def compress(dataset, mask, bitval, index_arr=None):
     return ibp_cuda.compress(dataset, mask, bitval, index_arr)
 
 def decompress_fetch(comp_dataset, mask, bitval, bitmask, device, comp_len=None,\
-                     index_arr=None, nblks=None, nthds=None, imp=None):
+                     index_arr=None, nblks=None, nthds=None, imp=None, output_tensor=None):
     return ibp_cuda.decompress_fetch(comp_dataset, mask, bitval, bitmask, device,\
-                                     comp_len, index_arr, nblks, nthds, imp)
+                                     comp_len, index_arr, nblks, nthds, imp, output_tensor)

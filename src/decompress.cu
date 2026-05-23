@@ -10,7 +10,8 @@
 at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &mask,
     const at::Tensor &bitval, const at::Tensor &bitmask, const torch::Device out_device,
     const c10::optional<int> &comp_len_, const c10::optional<at::Tensor> &index_array_,
-    const c10::optional<int> nblks_, const c10::optional<int> nthreads_, c10::optional<int> impl_)
+    const c10::optional<int> nblks_, const c10::optional<int> nthreads_, c10::optional<int> impl_,
+    const c10::optional<at::Tensor> &output_tensor)
 {
     // Tested for V100, A100. Adjust as needed for your GPU
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -108,7 +109,20 @@ at::Tensor decompress_fetch(const at::Tensor &comp_dataset, const at::Tensor &ma
 
     // Now generate output decompressed tensor
     auto options = torch::TensorOptions().device(out_device).dtype(comp_dataset.dtype());
-    at::Tensor decomp_dataset = torch::zeros({(long)num_vecs, (long)vec_size}, options);
+    at::Tensor decomp_dataset;
+    if (output_tensor.has_value()) {
+        TORCH_CHECK(output_tensor.value().device() == out_device,
+            "Output tensor device does not match specified output device");
+        TORCH_CHECK(output_tensor.value().dtype() == comp_dataset.dtype(),
+            "Output tensor dtype does not match input dataset dtype");
+        TORCH_CHECK(output_tensor.value().size(0) == num_vecs &&
+            output_tensor.value().size(1) == vec_size,
+            "Output tensor shape does not match expected decompressed shape");
+        decomp_dataset = output_tensor.value();
+    } else {
+        decomp_dataset = torch::zeros({(long)num_vecs, (long)vec_size}, options);
+    }
+
     if(out_device.type() != c10::kCUDA)
         decomp_dataset = decomp_dataset.pin_memory();
 

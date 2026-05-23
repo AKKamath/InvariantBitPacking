@@ -157,6 +157,12 @@ ibp.preprocess_kmeans(dataset: torch.Tensor, centroids: int, threshold: float | 
 # Returns: A GPU tensor representing the compressed size of each element of the dataset.
 ibp.get_compress_size(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
 
+# Computes the average compressed size for each tensor in the dataset. Non-blocking call.
+# Non-blocking call. Synchronize CUDA before accessing output tensor.
+# index_array Optional tensor specifying the indices of the vectors to be considered.
+# Returns: A GPU tensor representing the compressed size of each element of the dataset.
+ibp.get_single_compress_len(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
+
 # Compresses dataset in-place. Used for CPU-side compression.
 # Optionally, an index array can be provided to specify which vectors to consider.
 # Returns: A GPU tensor bitmask marking compressed tensors
@@ -164,10 +170,12 @@ ibp.compress_inplace(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Te
 
 # Fetches and decompresses compressed data into GPU memory.
 # comp_len provides an estimated compressed size per tensor, which can help improve performance if provided.
-# Optionally, an index array can be provided to specify which vectors to consider.
+# Optionally:
+#   index_arr which is an array of indices can be provided to specify which vectors to consider.
+#   output_tensor can be provided to store the decompressed tensors into.
 # Returns: A GPU tensor with the indexed tensors decompressed.
 ibp.decompress_fetch(comp_dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, bitmask: torch.Tensor, device: torch.Device, comp_len: int | None = None,\
-                     index_arr: torch.Tensor | None = None)
+                     index_arr: torch.Tensor | None = None, output_tensor: torch.Tensor | None = None)
 ```
 
 # Source code and repository structure
