@@ -10,37 +10,46 @@ def parse_input_file(input_file):
     records = []
     current_model = None
 
-    with open(input_file, "r", encoding="utf-8") as file:
-        for raw_line in file:
-            line = raw_line.strip()
-            if not line:
-                continue
+    with open(input_file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-            if line.startswith("make[") or line.startswith("~/"):
-                continue
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
 
-            parts = [part.strip() for part in re.split(r"\t+|\s{2,}", line) if part.strip() != ""]
-            if len(parts) < 3:
-                continue
+        if not line or line.startswith("make[") or line.startswith("~/"):
+            continue
 
-            if parts[1] == "Cache time (s)" and parts[2] == "Inference time (s)":
-                current_model = parts[0]
-                continue
+        method_match = re.match(r'^(FlexGen[^:]*?):\s*$', line)
+        if method_match:
+            method = method_match.group(1).strip()
+            total_time = None
+            weight_load = None
 
-            if current_model is None:
-                continue
+            while i < len(lines):
+                inner = lines[i].strip()
+                i += 1
+                if not inner:
+                    break
+                m = re.match(r'^Total:\s*([\d.]+)', inner)
+                if m:
+                    total_time = float(m.group(1))
+                m = re.match(r'^Weight load time:\s*([\d.]+)', inner)
+                if m:
+                    weight_load = float(m.group(1))
 
-            method = parts[0]
-            cache_time = float(parts[1])
-            inference_time = float(parts[2])
-            records.append(
-                {
-                    "model": current_model,
+            if total_time is not None and weight_load is not None:
+                records.append({
+                    "model": "",
                     "method": method,
-                    "cache": cache_time,
-                    "inference": inference_time,
-                }
-            )
+                    "cache": weight_load,
+                    "inference": total_time - weight_load,
+                })
+            continue
+
+        if not re.match(r'^(Total:|Cache time:|Weight load time:|Prefill:|Decode:)', line):
+            current_model = line
 
     if not records:
         raise ValueError("No valid records found in input file.")
@@ -62,7 +71,7 @@ def main():
             models.append(model)
         methods_by_model[model][row["method"]] = row
 
-    method_order = ["InfiniGen + IBP", "InfiniGen"]
+    method_order = ["FlexGen + IBP", "FlexGen"]
     methods_found = []
     for preferred in method_order:
         if any(preferred in methods_by_model[model] for model in models):
@@ -72,15 +81,15 @@ def main():
             if method not in methods_found:
                 methods_found.append(method)
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(9, 3))
 
     bar_width = 0.34
     y = np.arange(len(models))
     offsets = np.linspace(-bar_width / 2, bar_width / 2, max(2, len(methods_found)))
 
     method_colors = {
-        "InfiniGen": {"cache": "#e67e22", "inference": "#f8c291"},
-        "InfiniGen + IBP": {"cache": "#1e8449", "inference": "#a9dfbf"},
+        "FlexGen": {"cache": "#e67e22", "inference": "#f8c291"},
+        "FlexGen + IBP": {"cache": "#1e8449", "inference": "#a9dfbf"},
     }
     fallback_colors = {
         "cache": "#7f7f7f",
@@ -125,30 +134,30 @@ def main():
     ax.set_yticks(y)
     ax.set_yticklabels(models)
     ax.set_xlabel("Time (s)", fontweight="bold", fontsize=12)
-    ax.set_ylabel("Model", fontweight="bold", fontsize=12)
+    #ax.set_ylabel("Model", fontweight="bold", fontsize=12)
     ax.grid(axis='x', linestyle='--', alpha=0.7)
     ax.set_axisbelow(True)
 
     legend_handles = [
         Patch(
-            facecolor=method_colors.get("InfiniGen", fallback_colors)["cache"],
+            facecolor=method_colors.get("FlexGen", fallback_colors)["cache"],
             edgecolor="black",
-            label="InfiniGen (Cache)",
+            label="FlexGen (Weight load)",
         ),
         Patch(
-            facecolor=method_colors.get("InfiniGen + IBP", fallback_colors)["cache"],
+            facecolor=method_colors.get("FlexGen + IBP", fallback_colors)["cache"],
             edgecolor="black",
-            label="InfiniGen + IBP (Cache)",
+            label="FlexGen + IBP (Weight load)",
         ),
         Patch(
-            facecolor=method_colors.get("InfiniGen", fallback_colors)["inference"],
+            facecolor=method_colors.get("FlexGen", fallback_colors)["inference"],
             edgecolor="black",
-            label="InfiniGen (Inference)",
+            label="FlexGen (Inference)",
         ),
         Patch(
-            facecolor=method_colors.get("InfiniGen + IBP", fallback_colors)["inference"],
+            facecolor=method_colors.get("FlexGen + IBP", fallback_colors)["inference"],
             edgecolor="black",
-            label="InfiniGen + IBP (Inference)",
+            label="FlexGen + IBP (Inference)",
         ),
     ]
     ax.legend(

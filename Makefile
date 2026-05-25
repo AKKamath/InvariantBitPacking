@@ -176,6 +176,9 @@ nvcomp_kvcache:
 	python tests/nvcomp_comparison.py kvcache 1 > ${OUTPUT}/kv_wiki_plaintiff.log
 	python tests/nvcomp_comparison.py kvcachebf 1 > ${OUTPUT}/kv_wiki_plaintiff_bf.log
 
+nvcomp_llm_weight:
+	python tests/nvcomp_llm_comparison.py > ${OUTPUT}/nvcomp_llm.log
+
 nvcomp_dlrm: ${DLRM}/feature_0_part0.npy ${DLRM}/feature_1_part0.npy ${DLRM}/feature_2_part0.npy ${DLRM}/feature_3_part0.npy \
 	${DLRM}/feature_4_part0.npy ${DLRM}/feature_5_part0.npy ${DLRM}/feature_6_part0.npy ${DLRM}/feature_7_part0.npy ${DLRM}/feature_8_part0.npy \
 	${DLRM}/feature_9_part0.npy ${DLRM}/feature_10_part0.npy ${DLRM}/feature_11_part0.npy ${DLRM}/feature_12_part0.npy ${DLRM}/feature_13_part0.npy \
@@ -248,6 +251,9 @@ plot_dlrm: ${OUTPUT}/dlrm_perf.log
 # Figure 10
 llm: ${OUTPUT}
 	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_expt > ../../${OUTPUT}/llm_latency.log;
+
+llm_flexgen: ${OUTPUT}
+	cd workloads/InfiniGen-IBP; conda run -n infinigen $(MAKE) run_flexgen > ../../${OUTPUT}/llm_flexgen_latency.log;
 
 plot_llm: ${OUTPUT}/llm_latency.log
 	python scripts/plot_llm_perf.py ${OUTPUT}/llm_latency.log ${OUTPUT}/llm_latency
