@@ -1,7 +1,12 @@
 # Invariant Bit Packing
 [![DOI](https://zenodo.org/badge/862131761.svg)](https://doi.org/10.5281/zenodo.18869046)
 
-This repository contains the source code, profiling scripts, and workloads evaluated for Invariant Bit Packing (IBP) compression, introduced in the EuroSys 2026 paper titled "Reducing the GPU Memory Bottleneck with Lossless Compression for ML". IBP identifies and eliminates low-entropy, invariant bits _across_ sets of tensors, improving throughput by employing GPU-optimized decompression mechanisms, leveraging warp parallelism, low-overhead bit operations, and asynchronous GPU-optimized PCIe transfers. We provide easy-to-use APIs, showcasing them by adding IBP support to GNN training, as well as DLRM and LLM inference frameworks.
+This README discusses the IBP library. To replicate our paper's experiments check our [Experiment README](Experiments.md).
+
+This repository contains the source code, profiling scripts, and workloads evaluated for Invariant Bit Packing (IBP) compression, introduced in the EuroSys 2026 paper titled "Reducing the GPU Memory Bottleneck with Lossless Compression for ML". 
+
+IBP identifies and eliminates low-entropy, invariant bits _across_ sets of tensors, improving throughput by employing GPU-optimized decompression mechanisms, leveraging warp parallelism, low-overhead bit operations, and asynchronous GPU-optimized PCIe transfers. We provide easy-to-use APIs, showcasing them by adding IBP support to GNN training, as well as DLRM and LLM inference frameworks.
+
 
 Full details of our implementation can be found in our [paper](https://akkamath.github.io/files/EuroSys26_IBP.pdf):
 <pre>
@@ -11,124 +16,30 @@ Aditya K Kamath, Arvind Krishnamurthy, Marco Canini, Simon Peter
 DOI: https://doi.org/10.1145/3767295.3803595
 </pre>
 
-## Hardware and software that we tested on
+## Hardware and software requirements
 Hardware:
-* An NVIDIA A100 GPU.
-* Minimum 300 GB CPU memory.
-* 1 TB disk space.
+* NVIDIA Ampere+ GPU, for async memory instructions
 
-Docker and NVIDIA Container Toolkit (installation instructions given below) are enough for software; all other software requirements are handled within the Docker container. The machine we evaluated had:
-* Ubuntu 22.04 OS
-* CUDA 11.7
-* Python 3.9
-* Pytorch 1.13.1
+Software:
+* CUDA 11+
+* Python 3.9+
+* PyTorch with CUDA support
 
-Parts of the work have also been tested with CUDA 12.1 and PyTorch 2.1, but various libraries need to be adjusted to ensure compatibility with these versions.
-
-Anything newer _should_ work for just the IBP library. IBP's only dependency is Torch. In setup.py you may need to add flags for newer GPUs. 
-For example for Hopper you can uncomment in line 21/22:
+In setup.py you may need to add flags for newer GPUs. For example for Hopper you can uncomment in line 21/22:
 ```python
 #cc_flag.append("-gencode")
 #cc_flag.append("arch=compute_90,code=sm_90")
 ```
 
 ## Install
-First download this repo and setup the submodules. Then download the requisite datasets. 
-The GNN dataset requires DGL to be installed first, so we'll download that separately once DGL is installed.
 ```
 git clone https://github.com/AKKamath/InvariantBitPacking.git
 cd InvariantBitPacking
-git submodule update --init --recursive
-
-make download_dlrm # 16GB download
-make download_llm # 20GB download
-```
-
-### Docker installation (Recommended)
-We provide a docker image for IBP with all its dependencies installed. To access the docker image, you need to have [Docker](https://docs.docker.com/engine/install/) and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed on your system. You can then launch the docker container and navigate to the folder containing the artifact, as follows:
-```
-# Build the local docker image [~1 hour]
-docker build -t ibp-image -f Dockerfile .
-# Run the docker image
-docker run --gpus 0 \
-  -e OMP_NUM_THREADS=32  -e MKL_NUM_THREADS=32 \
-  -e OPENBLAS_NUM_THREADS=32 -e NUMEXPR_NUM_THREADS=32 \
-  -e TORCH_NUM_THREADS=32 -e TORCH_INTEROP_THREADS=32 \
-  -it -p 8181:8181 --ipc=host --cap-add=SYS_ADMIN ibp-image
-```
-
-### Minimal installation (Only IBP library)
-```
 pip install torch # Make sure torch is already installed.
 pip install -v . --no-build-isolation
 ```
 
-You can then use ibp in your Python files by including it, as detailed below in API Documentation.
-
-### Manual installation
-The Docker setup is recommended for ease of use. Manual installation can cause problems if the system's library versions mismatch with those expected. Use at your own risk.
-
-```
-# If conda not installed:
-make install_miniconda
-# Setup:
-make create_env
-conda activate ibp
-# If system does not have CUDA 11.7 installed, the below installs it in conda.
-make install_cuda
-conda env config vars set CUDA_HOME="${CONDA_PREFIX}"
-conda env config vars set CUDA_TOOLKIT_ROOT_DIR="${CONDA_PREFIX}"
-conda env config vars set CUDACXX="${CONDA_PREFIX}/bin/nvcc"
-conda env config vars set PATH="$CONDA_PREFIX/bin:$PATH"
-conda env config vars set LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$(pwd)/ndzip/build:$LD_LIBRARY_PATH
-conda env config vars set DGL_HOME=$(pwd)/workloads/DGL-IBP
-# Otherwise if CUDA 11.7 is already installed, continue from here.
-make install_deps
-conda deactivate
-conda activate ibp
-make install
-pip install torchdata==0.7.0
-make download_gnn
-```
-
-## Replicating experiments
-Before running any experiment ensure you are in the ibp conda environment. This can be ensured by running the following command:
-```
-conda activate ibp
-```
-
-### Run commands
-```
-# Main experiments:
-make nvcomp_comparison; # Tables 1, 2, 3
-make gnn; # Figure 8
-make dlrm; # Figure 10
-make llm; # Figure 11
-# Other experiments:
-make invariance; # Table 4
-make decomp_thput; # Figure 7
-```
-
-### Results
-To generate the graphs for the main experiments, you can run the following commands. The generated graphs will be in the results/ folder.
-```
-# Main experiments:
-make plot_gnn; # Figure 8
-make plot_dlrm; # Figure 10
-make plot_llm; # Figure 11
-```
-
-You can also run ```cat {filename}``` to output the results to the terminal. This can then be copy-pasted into your favorite graph plotting tool (e.g., Excel, Google Sheets, matplotlib).
-
-Main experiments:
-* Tables 1, 2 - results/nvcomp_comparison.log
-* Figure 8 - results/gnn_perf.log
-* Figure 10 - results/dlrm_perf.log
-* Figure 11 - results/llm_latency.log
-
-Other experiments:
-* Table 4: results/invariance.out
-* Figure 7: results/decomp_thput.out
+You can then use ibp in your Python files by including it, as detailed below.
 
 # API Documentation
 We provide both high-level PyTorch and low-level CUDA API for integration with projects.
@@ -155,15 +66,14 @@ ibp.preprocess(dataset: torch.Tensor, threshold: float | None = None)
 # Returns: mask and bitval 2D GPU tensors.
 ibp.preprocess_kmeans(dataset: torch.Tensor, centroids: int, threshold: float | None = None)
 
-# Computes the compressed size of a dataset. Non-blocking call.
-# This function calculates the size of each element of the compressed dataset.
-# Optionally, an index array can be provided to specify which vectors to consider.
+# Computes the compressed size of a dataset.
 # Non-blocking call. Synchronize CUDA before accessing output tensor.
-# index_array_ Optional tensor specifying the indices of the vectors to be considered.
+# This function calculates the size of each element of the compressed dataset.
+# index_array: Optional tensor specifying the indices of the vectors to be considered.
 # Returns: A GPU tensor representing the compressed size of each element of the dataset.
 ibp.get_compress_size(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
 
-# Computes the average compressed size for each tensor in the dataset. Non-blocking call.
+# Computes the average compressed size for each tensor in the dataset.
 # Non-blocking call. Synchronize CUDA before accessing output tensor.
 # index_array Optional tensor specifying the indices of the vectors to be considered.
 # Returns: A GPU tensor representing the compressed size of each element of the dataset.
@@ -175,21 +85,25 @@ ibp.get_single_compress_len(dataset: torch.Tensor, mask: torch.Tensor, bitval: t
 ibp.compress_inplace(dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, index_arr: torch.Tensor | None = None)
 
 # Fetches and decompresses compressed data into GPU memory.
-# comp_len provides an estimated compressed size per tensor, which can help improve performance if provided.
 # Optionally:
+#   comp_len provides an estimated compressed size per tensor, which can help improve performance if provided.
 #   index_arr which is an array of indices can be provided to specify which vectors to consider.
 #   output_tensor can be provided to store the decompressed tensors into.
 # Returns: A GPU tensor with the indexed tensors decompressed.
-ibp.decompress_fetch(comp_dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, bitmask: torch.Tensor, device: torch.Device, comp_len: int | None = None,\
+ibp.decompress_fetch(comp_dataset: torch.Tensor, mask: torch.Tensor, bitval: torch.Tensor, bitmask: torch.Tensor, \
+                     device: torch.Device, comp_len: int | None = None, \
                      index_arr: torch.Tensor | None = None, output_tensor: torch.Tensor | None = None)
 ```
 
 ### Example usage
-Here we show exactly how IBP could be integrated, taking an example of FlexGen. You can see the real changes in [pytorch_backend.py](workloads/InfiniGen-IBP/speedup/flexgen/original/pytorch_backend.py) and [flex_gemma.py](workloads/InfiniGen-IBP/speedup/flexgen/original/flex_gemma.py) (`CTRL + F ibp` to see them). The real changes are a bit more complicated than shown here as they have some finetuning to maximize the performance gains from compression.
+Here we show exactly how IBP could be integrated, taking an example of FlexGen. You can see the real changes in [pytorch_backend.py](https://github.com/AKKamath/InfiniGen-IBP/blob/main/speedup/flexgen/original/pytorch_backend.py) and [flex_gemma.py](https://github.com/AKKamath/InfiniGen-IBP/blob/main/speedup/flexgen/original/flex_gemma.py) (`CTRL + F ibp` to see them). The real changes are a bit more complicated than shown here as they have some fine-tuning to maximize the performance gains from compression.
 
 First, we add the preprocess and compress functions to FlexGen's TorchTensor wrapper class. Later when we've loaded the weights to the CPU, we call them:
 
 ```diff
+import torch
++ import ibp
+...
 # Add preprocess and compress functions to FlexGen's TorchTensor class
 class TorchTensor:
     ...
@@ -215,6 +129,7 @@ def init_weight_list(weight_specs, policy, env):
 
 Notice that we change the view of the tensor to torch.int64; IBP operates on bits so the datatype of the input tensor doesn't matter as long as it's the same when both compressing and decompressing. By using int64, we use 8-byte chunks which reduces the 'participation bit' headers in the compressed tensors. We get back our float values losslessly when decompressing.
 Below we see how data is decompressed later when transferring from the CPU.
+
 ```diff
 def general_copy(dst: TorchTensor, dst_indices: Tuple[slice],
                  src: TorchTensor, src_indices: Tuple[slice]):
@@ -236,7 +151,6 @@ Our respository has the following folders, with contents as described:
 * [src](src/): Contains the source code for the PyTorch module, converting the high-level Python calls to low-level CUDA functions.
 * [tests](tests/): Contains scripts for some of the IBP evaluations.
 * [workloads](workloads/): Contains submodules for GNN, DLRM, and LLM frameworks used during evaluation.
-
 
 # Citation
 If you use our work, please cite our paper:
