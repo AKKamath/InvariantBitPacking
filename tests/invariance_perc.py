@@ -5,7 +5,7 @@ import math
 import sys
 import os
 import re
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../../training_backend/")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../workloads/Legion-IBP/training_backend/")
 import load_graph as ld
 
 DLRM_FOLDER = "./dlrm_feats"
@@ -72,7 +72,7 @@ def bitpack_group(dataset: torch.Tensor):
         diff = torch.ceil(torch.log2(diff))
         #print(diff)
         sums += torch.nansum(diff)
-    #print((1 - sums / (val * dataset.shape[1] * 32)) * 100)
+    print((1 - sums / (val * dataset.shape[1] * 32)) * 100)
     return (1 - sums / (val * dataset.shape[dim2] * 32)) * 100
 
 #ibp.print_debug(True)
@@ -83,10 +83,44 @@ bpgp_size = {}
 for dataset in datasets:
     if dataset == "kvcache":
         folders = os.listdir(KVCACHE_FOLDER)
-        index = 0
-        if len(sys.argv) > 2:
-            index = int(sys.argv[2])
-        folder = folders[index]
+        for x in folders:
+            if 'plaintiff' in x and 'facebook_opt' in x:
+                folder = x
+                break
+        print(folders, flush=True)
+        print(folder, flush=True)
+        files = os.listdir(KVCACHE_FOLDER + folder)
+        features = {}
+        for file in files:
+            match = re.search(r"cache_0_([0-9]+)_([0-9]+)_", file)
+            if match:
+                layer = int(match.group(1))
+                batch = int(match.group(2))
+                tensor = torch.load(KVCACHE_FOLDER + folder + "/" + file)
+                if layer not in features:
+                    features[layer] = tensor
+                else:
+                    features[layer] = torch.cat((features[layer], tensor), dim=0)
+        for ind, layer in enumerate(features.keys()):
+            '''
+            if ind == 0:
+                feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+            else:
+                feat = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+                feature = torch.cat((feat, feature))
+            '''
+            feature = features[layer].view((features[layer].shape[0], features[layer].shape[1] * features[layer].shape[2])).view(torch.int32)
+            feature = feature.detach().clone().pin_memory()
+            comp_size[dataset + str(layer)] = ibp_ify(feature)
+            bitp_size[dataset + str(layer)] = bitpack(feature)
+            bpgp_size[dataset + str(layer)] = bitpack_group(feature)
+        continue
+    if dataset == "kvcachebf":
+        folders = os.listdir(KVCACHE_FOLDER)
+        for x in folders:
+            if 'plaintiff' in x and 'google' in x:
+                folder = x
+                break
         print(folders, flush=True)
         print(folder, flush=True)
         files = os.listdir(KVCACHE_FOLDER + folder)

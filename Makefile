@@ -269,7 +269,7 @@ sens_sweep: ${OUTPUT}
 	python tests/sens_sweep.py "mag" > ${OUTPUT}/sens_sweep_mag.out
 
 invariance: ${OUTPUT} # Table 3
-	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag dlrm" > ${OUTPUT}/invariance.out
+	python tests/invariance_perc.py "pubmed citeseer cora reddit products mag dlrm kvcache kvcachebf" > ${OUTPUT}/invariance.out
 
 # ------------------------ SLURM for tests ------------------------ 
 
